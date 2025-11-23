@@ -1,9 +1,168 @@
-import os
-import re
+import os,re
 from typing import *
 import xml.etree.ElementTree as ET
-from datetime import datetime, timedelta
+from datetime import datetime
 
+class Debugger:
+    """
+    Debugger is a professional utility class for printing structured and color-coded debug messages
+    to the terminal. It supports multiple message levels, ANSI color coding, custom colors, and
+    indentation levels for hierarchical debug output.
+
+    Features:
+    - Multiple message types: INFO, DEBUG, SUCCESS, WARNING, ERROR, CRITICAL, CUSTOM
+    - ANSI color-coded output if supported; automatically enabled on Windows
+    - Custom colors for user-defined messages
+    - Indentation based on debug level for hierarchical debugging
+    - Simple API for professional logging in CLI applications
+    """
+
+    # Default ANSI color codes and symbols for each message type
+    COLORS = {
+        "RESET": "\033[0m",
+        "BRIGHT": "\033[1m",
+        "INFO": "\033[1;94m",      # Bright Blue
+        "DEBUG": "\033[1;36m",     # Cyan
+        "SUCCESS": "\033[1;92m",   # Bright Green
+        "WARNING": "\033[1;93m",   # Yellow
+        "ERROR": "\033[1;91m",     # Bright Red
+        "CRITICAL": "\033[1;41m",  # White text on Red background
+        "CUSTOM": "\033[1;95m",    # Magenta default
+    }
+
+    SYMBOLS = {
+        "INFO": "ℹ",
+        "DEBUG": "🐞",
+        "SUCCESS": "✔",
+        "WARNING": "⚠",
+        "ERROR": "✖",
+        "CRITICAL": "‼",
+        "CUSTOM": "*",
+    }
+
+    def __init__(self, level: Optional[int] = 0, DefaultSymbol:Optional[bool] = False):
+        """
+        Initialize the Debugger.
+
+        :param level: Optional integer debug level. Each level adds a tab '\t' indentation to messages.
+        :param DefaultSymbol: Optional default symbol usage. Default symbols are automatically used in debug messages.
+        """
+        self.level = level
+        self.DefaultSymbol = DefaultSymbol
+        self.ansi = self._enable_ansi()
+
+    def _enable_ansi(self) -> bool:
+        """
+        Enable ANSI escape sequences if supported by the terminal.
+
+        Windows: Uses Windows API to enable virtual terminal processing.
+        Linux/MacOS: Checks if stdout is a terminal (isatty).
+
+        :return: True if ANSI codes can be used, False otherwise
+        """
+        try:
+            if os.name == "nt":
+                import ctypes
+                kernel32 = ctypes.windll.kernel32
+                handle = kernel32.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
+                mode = ctypes.c_uint()
+                if kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+                    # ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
+                    kernel32.SetConsoleMode(handle, mode.value | 0x0004)
+                    return True
+                return False
+            else:
+                return sys.stdout.isatty()
+        except Exception:
+            return False
+
+    def _print(self, message_type: str, message: str, color: Optional[str] = None, symbol: Optional[str] = None):
+        """
+        Internal method to print a message with optional color, symbol, and indentation.
+
+        :param message_type: The type of message, e.g., INFO, DEBUG, ERROR
+        :param message: The message string to print
+        :param color: Optional custom ANSI color code (overrides default)
+        :param symbol: Optional symbol to display before the message type
+        """
+        indent = '\t' * self.level
+        ansi_color = color if color else self.COLORS.get(message_type.upper(), "")
+        reset_color = self.COLORS["RESET"]
+        sym = symbol if symbol else (self.SYMBOLS.get(message_type.upper(), "") if self.DefaultSymbol else "")
+        if self.ansi and ansi_color:
+            print(f"{indent}[{ansi_color}{sym}{message_type.upper()}{reset_color}]\t{message}")
+        else:
+            print(f"{indent}[{message_type.upper()}]\t{message}")
+
+    # -------------------- Standard Debug Levels --------------------
+
+    def info(self, message: str):
+        """
+        Print an informational message in bright blue.
+
+        :param message: The message string to print
+        """
+        self._print("INFO", message)
+
+    def debug(self, message: str):
+        """
+        Print a debug message in cyan, for development diagnostics.
+
+        :param message: The message string to print
+        """
+        self._print("DEBUG", message)
+
+    def success(self, message: str):
+        """
+        Print a success message in bright green, indicating a successful operation.
+
+        :param message: The message string to print
+        """
+        self._print("SUCCESS", message)
+
+    def warning(self, message: str):
+        """
+        Print a warning message in yellow, highlighting potential issues.
+
+        :param message: The message string to print
+        """
+        self._print("WARNING", message)
+
+    def error(self, message: str):
+        """
+        Print an error message in bright red, indicating a recoverable failure.
+
+        :param message: The message string to print
+        """
+        self._print("ERROR", message)
+
+    def critical(self, message: str):
+        """
+        Print a critical message in white text on red background, for severe failures.
+
+        :param message: The message string to print
+        """
+        self._print("CRITICAL", message)
+
+    def custom(self, message: str, color_code: str = "\033[1;95m", symbol: str = "*"):
+        """
+        Print a custom message with a user-defined color and symbol.
+
+        :param message: The message string to print
+        :param color_code: ANSI escape code string for custom color (default is bright magenta)
+        :param symbol: Optional symbol to display before the message type
+        """
+        self._print("CUSTOM", message, color=color_code, symbol=symbol)
+
+    def set_level(self, level: int):
+        """
+        Set the debug level dynamically.
+
+        :param level: New debug level. Each level adds a tab '\t' indentation.
+        """
+        self.level = level
+
+        
 
 class File:
     """
@@ -14,7 +173,7 @@ class File:
 
     SUPPORTED_FORMATS = ['.json', '.txt', '.log', '.pdf', '.xml', '.csv', '.yml', '.yaml', '.ini', '.properties', '.md', '.rtf', '.html', '.css', '.js','.tex','.py']  # Supported file formats
 
-    def __init__(self, filefolder: Optional[str] = None, debug:bool=False):
+    def __init__(self, filefolder: Optional[str] = None, debug:bool=False,debugger:Optional[Debugger]=None):
         """
         Initializes the File object with an optional filefolder for default file path handling.
 
@@ -23,6 +182,7 @@ class File:
         """
         self.filefolder = filefolder
         self.debug = debug
+        self.debugger = Debugger() if debugger==None else debugger
 
     def _default_dict(self):
         """
@@ -74,7 +234,7 @@ class File:
 
         if not os.path.exists(file_path):
             if self.debug:
-                print(f"\033[31m    Path does not exist: \033[35m{file_path}\033[0m")
+                self.debugger.error(f"Path does not exist: {file_path}")
             return {}
 
         info = {
@@ -88,8 +248,7 @@ class File:
         }
 
         if self.debug:
-            print(f"\033[32m    Retrieved info: \033[35m{info}\033[0m")
-
+            self.debugger.info(f"Retrieved info: {info}")
         return info
     
     def rename_file(self, old_path: str, new_name: str) -> bool:
@@ -104,7 +263,7 @@ class File:
 
         if not os.path.isfile(file_path):
             if self.debug:
-                print(f"\033[31m    File not found: \033[35m{file_path}\033[0m")
+                self.debugger.error(f"File not found: {file_path}")
             return False
 
         directory = os.path.dirname(file_path)
@@ -113,11 +272,11 @@ class File:
         try:
             os.rename(file_path, new_path)
             if self.debug:
-                print(f"\033[32m    Renamed file: \033[35m{file_path} -> {new_path}\033[0m")
+                self.debugger.success(f"Renamed file: {file_path} -> {new_path}")
             return True
         except Exception as e:
             if self.debug:
-                print(f"\033[31m    Rename failed: \033[35m{e}\033[0m")
+                self.debugger.error(f"Rename failed: {e}")
             return False
 
     def rename_folder(self, old_path: str, new_name: str) -> bool:
@@ -132,7 +291,7 @@ class File:
 
         if not os.path.isdir(folder_path):
             if self.debug:
-                print(f"\033[31m    Folder not found: \033[35m{folder_path}\033[0m")
+                self.debugger.error(f"Folder not found: {folder_path}")
             return False
 
         parent_directory = os.path.dirname(folder_path)
@@ -141,11 +300,11 @@ class File:
         try:
             os.rename(folder_path, new_path)
             if self.debug:
-                print(f"\033[32m    Renamed folder: \033[35m{folder_path} -> {new_path}\033[0m")
+                self.debugger.success(f"Renamed folder: {folder_path} -> {new_path}")
             return True
         except Exception as e:
             if self.debug:
-                print(f"\033[31m    Rename failed: \033[35m{e}\033[0m")
+                self.debugger.error(f"Rename failed: {e}")
             return False
 
     def create_shortcut(self, target_path: str, shortcut_path: str, description: str = "") -> bool:
@@ -166,11 +325,11 @@ class File:
             shortcut.Save()
             
             if self.debug:
-                print(f"\033[32m    Created shortcut: \033[35m{shortcut_path} -> {target_path}\033[0m")
+                self.debugger.success(f"Created shortcut: {shortcut_path} -> {target_path}")
             return True
         except Exception as e:
             if self.debug:
-                print(f"\033[31m    Failed to create shortcut: \033[35m{e}\033[0m")
+                self.debugger.error(f"Failed to create shortcut: {e}")
             return False
 
     def list_files_and_folders(self, path: Optional[str] = None) -> list:
@@ -192,11 +351,11 @@ class File:
             return os.listdir(absolute_path)  
         except FileNotFoundError:
             if self.debug:
-                print(f"\033[31mDirectory not found: \033[35m{absolute_path}\033[0m")
+                self.debugger.error(f"Directory not found: {absolute_path}")
             return []
         except PermissionError:
             if self.debug:
-                print(f"\033[31mPermission denied: \033[35m{absolute_path}\033[0m")
+                self.debugger.error(f"Permission denied: {absolute_path}")
             return []
     def create_folder(self, folder_path: str) -> bool:
         """
@@ -209,11 +368,11 @@ class File:
         try:
             os.makedirs(absolute_path, exist_ok=True)
             if self.debug:
-                print(f"\033[32mFolder created or already exists: \033[35m{absolute_path}\033[0m")
+                self.debugger.success(f"Folder created or already exists: {absolute_path}")
             return True
         except Exception as e:
             if self.debug:
-                print(f"\033[31mError creating folder: \033[35m{absolute_path}\033[0m - {e}")
+                self.debugger.error(f"Error creating folder: {absolute_path} - {e}")
             return False
 
     def copy_file(self, source: str, destination: str) -> bool:
@@ -231,19 +390,19 @@ class File:
             import shutil
             shutil.copy2(source_path, destination_path)  # Copy with metadata
             if self.debug:
-                print(f"\033[32mFile copied from: \033[35m{source_path}\033[32m to: \033[35m{destination_path}\033[0m")
+                self.debugger.success(f"File copied from: {source_path} to: {destination_path}")
             return True
         except FileNotFoundError:
             if self.debug:
-                print(f"\033[31mSource file not found: \033[35m{source_path}\033[0m")
+                self.debugger.error(f"Source file not found: {source_path}")
             return False
         except PermissionError:
             if self.debug:
-                print(f"\033[31mPermission denied: \033[35m{destination_path}\033[0m")
+                self.debugger.error(f"Permission denied: {destination_path}")
             return False
         except Exception as e:
             if self.debug:
-                print(f"\033[31mError copying file: \033[35m{source_path}\033[0m - {e}")
+                self.debugger.error(f"Error copying file: {source_path} - {e}")
             return False
 
     def move_file(self, source: str, destination: str) -> bool:
@@ -261,19 +420,19 @@ class File:
             import shutil
             shutil.move(source_path, destination_path)
             if self.debug:
-                print(f"\033[32mFile moved from: \033[35m{source_path}\033[32m to: \033[35m{destination_path}\033[0m")
+                self.debugger.success(f"File moved from: {source_path} to: {destination_path}")
             return True
         except FileNotFoundError:
             if self.debug:
-                print(f"\033[31mSource file not found: \033[35m{source_path}\033[0m")
+                self.debugger.error(f"Source file not found: {source_path}")
             return False
         except PermissionError:
             if self.debug:
-                print(f"\033[31mPermission denied: \033[35m{destination_path}\033[0m")
+                self.debugger.error(f"Permission denied: {destination_path}")
             return False
         except Exception as e:
             if self.debug:
-                print(f"\033[31mError moving file: \033[35m{source_path}\033[0m - {e}")
+                self.debugger.error(f"Error moving file: {source_path} - {e}")
             return False
 
     def move_folder(self, source: str, destination: str) -> bool:
@@ -291,19 +450,19 @@ class File:
             import shutil
             shutil.move(source_path, destination_path)
             if self.debug:
-                print(f"\033[32mFolder moved from: \033[35m{source_path}\033[32m to: \033[35m{destination_path}\033[0m")
+                self.debugger.success(f"Folder moved from: {source_path} to: {destination_path}")
             return True
         except FileNotFoundError:
             if self.debug:
-                print(f"\033[31mSource folder not found: \033[35m{source_path}\033[0m")
+                self.debugger.error(f"Source folder not found: {source_path}")
             return False
         except PermissionError:
             if self.debug:
-                print(f"\033[31mPermission denied: \033[35m{destination_path}\033[0m")
+                self.debugger.error(f"Permission denied: {destination_path}")
             return False
         except Exception as e:
             if self.debug:
-                print(f"\033[31mError moving folder: \033[35m{source_path}\033[0m - {e}")
+                self.debugger.error(f"Error moving folder: {source_path} - {e}")
             return False
 
 
@@ -329,7 +488,7 @@ class File:
             data = default if default is not None else {}
             
             if self.debug:
-                print(f"\033[32m    Created empty JSON file: \033[35m{file_path}\033[0m")
+                self.debugger.success(f"Created empty JSON file: {file_path}")
         else:
             try:
                 # Open and read the JSON file
@@ -337,7 +496,7 @@ class File:
                     data = json.load(f, object_hook=lambda d: defaultdict(self._default_dict, d) if isinstance(d, dict) else d)
                     
                 if self.debug:
-                    print(f"\033[32m    Successfully loaded JSON file: \033[35m{file_path}\033[0m")
+                    self.debugger.success(f"Successfully loaded JSON file: {file_path}")
             except json.JSONDecodeError as e:
                 # Handle JSON decoding errors
                 print(f"\033[31mJSON decoding error while reading \033[35m{path}\033[0m: \033[36m{e}\033[0m")
@@ -374,7 +533,7 @@ class File:
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=4)
                 if self.debug:
-                    print(f"\033[32m    Wrote JSON data to: \033[35m{file_path}\033[0m")
+                    self.debugger.success(f"Wrote JSON data to: {file_path}")
         except IOError as e:
             print(f"\033[31mAn error occurred while writing to JSON file \033[35m{path}\033[0m: \033[36m{e}\033[0m")
 
@@ -392,7 +551,7 @@ class File:
         if not os.path.exists(file_path):
             open(file_path, 'w').close()  # Create an empty file if it does not exist
             if self.debug:
-                print(f"\033[32m    Created empty TXT file: \033[35m{file_path}\033[0m")
+                self.debugger.success(f"Created empty TXT file: {file_path}")
             
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
@@ -411,7 +570,7 @@ class File:
         if not os.path.exists(file_path):
             open(file_path, 'w').close()  # Create an empty file if it does not exist
             if self.debug:
-                print(f"\033[32m    Created empty TXT file: \033[35m{file_path}\033[0m")
+                self.debugger.success(f"Created empty TXT file: {file_path}")
             
         lines = {}
         with open(file_path, 'r', encoding='utf-8') as f:
@@ -470,7 +629,7 @@ class File:
         with open(file_path, 'a', encoding='utf-8') as f:
             f.write(content + '\n')
             if self.debug:
-                print(f"\033[32m    Wrote LOG to: \033[35m{file_path}\033[0m")
+                self.debugger.success(f"Wrote LOG to: {file_path}")
 
     def log_write_entry(self, path: str, entry: str):
         """
@@ -556,27 +715,39 @@ class File:
         :param element: The XML Element to convert.
         :return: A dictionary representation of the XML element.
         """
-        parsed_data = {}
-        
-        for child in element:
-            child_dict = self._xml_to_dict(child)
-            # If the tag already exists in the dictionary, append to a list
-            if child.tag in parsed_data:
-                if isinstance(parsed_data[child.tag], list):
-                    parsed_data[child.tag].append(child_dict)
-                else:
-                    parsed_data[child.tag] = [parsed_data[child.tag], child_dict]
+        if element.attrib.get("xsi:nil") == "true":
+            return None
+        text = element.text.strip() if element.text and element.text.strip() else ""
+
+        if len(element) == 0:
+            if element.attrib:
+                out = {"@attributes": element.attrib}
+                if text:
+                    out["#text"] = text
+                return out if out else None
             else:
-                parsed_data[child.tag] = child_dict
-        
-        # Add attributes of the element as well
+                return text if text != "" else None
+            
+        result = {}
+
         if element.attrib:
-            parsed_data['@attributes'] = element.attrib
-        
-        if element.text and element.text.strip():
-            parsed_data['#text'] = element.text.strip()
-        
-        return parsed_data
+            result["@attributes"] = dict(element.attrib)
+
+        if text:
+            result["#text"] = text
+
+        for child in element:
+            child_value = self._xml_to_dict(child)
+            tag = child.tag
+
+            if tag in result:
+                if not isinstance(result[tag], list):
+                    result[tag] = [result[tag]]
+                result[tag].append(child_value)
+            else:
+                result[tag] = child_value
+
+        return result
 
     def xml_write(self, path: str, data: Dict[str, Any], root_element: Optional[str] = 'root'):
         """
@@ -606,26 +777,41 @@ class File:
         :param root_element: The name of the root element.
         :return: The corresponding XML Element object.
         """
-        # Create the root element
-        root = ET.Element(root_element)
-        
-        for key, value in data.items():
-            if isinstance(value, dict):
-                # Recursively create sub-elements for nested dictionaries
-                sub_elem = self._dict_to_xml(value, key)
-                root.append(sub_elem)
-            elif isinstance(value, list):
-                # Handle lists by creating a sub-element for each item in the list
-                for item in value:
-                    sub_elem = self._dict_to_xml(item, key)
-                    root.append(sub_elem)
+        if not isinstance(data, dict) and not isinstance(data, list):
+            elem = ET.Element(root_element)
+            if data is None:
+                elem.set("xsi:nil", "true")
             else:
-                # If the value is a simple type, set it as the text of the element
-                sub_elem = ET.Element(key)
-                sub_elem.text = str(value)
-                root.append(sub_elem)
-        
-        return root
+                elem.text = str(data)
+            return elem
+
+        if isinstance(data, list):
+            wrapper = ET.Element(root_element)
+            for item in data:
+                sub_elem = self._dict_to_xml(item, root_element)
+                wrapper.append(sub_elem)
+            return wrapper
+
+        elem = ET.Element(root_element)
+
+        attributes = data.get("@attributes", {})
+        for k, v in attributes.items():
+            elem.set(k, v)
+
+        if "#text" in data:
+            elem.text = str(data["#text"])
+
+        for key, value in data.items():
+            if key in ("@attributes", "#text"):
+                continue
+
+            if isinstance(value, list):
+                for item in value:
+                    elem.append(self._dict_to_xml(item, key))
+            else:
+                elem.append(self._dict_to_xml(value, key))
+
+        return elem
 
     def xml_append(self, path: str, data: Dict[str, Any], root_element: Optional[str] = 'root'):
         """
@@ -708,7 +894,7 @@ class File:
                 writer = csv.DictWriter(file, fieldnames=[], delimiter=delimiter, quotechar=quotechar)
                 writer.writeheader()  # Write an empty header
                 if self.debug:
-                    print(f"\033[32m    Created empty CSV file: \033[35m{file_path}\033[0m")
+                    self.debugger.success(f"Created empty CSV file: {file_path}")
             return []
 
         with open(file_path, mode='r', encoding='utf-8') as file:
@@ -815,7 +1001,7 @@ class File:
             with open(file_path, 'w', encoding='utf-8') as file:
                 yaml.dump(default or {}, file, default_flow_style=False)
             if self.debug:
-                print(f"\033[32m    Created empty YAML file: \033[35m{file_path}\033[0m")
+                self.debugger.success(f"Created empty YAML file: {file_path}")
             return default or {}
 
         # Read existing YAML file
@@ -864,7 +1050,7 @@ class File:
             with open(file_path, 'w', encoding='utf-8') as file:
                 config.write(file)
             if self.debug:
-                print(f"\033[32m    Created empty INI file: \033[35m{file_path}\033[0m")
+                self.debugger.success(f"Created empty INI file: {file_path}")
             return default or {}
 
         # Read the existing INI file
@@ -916,7 +1102,7 @@ class File:
         if not os.path.exists(file_path):
             open(file_path, 'w').close()  # Create empty file if not exists
             if self.debug:
-                print(f"\033[32m    Created empty PROSPERTIES file: \033[35m{file_path}\033[0m")
+                self.debugger.success(f"Created empty PROPERTIES file: {file_path}")
 
         with open(file_path, 'r', encoding='utf-8') as f:
             for line in f:
@@ -954,7 +1140,7 @@ class File:
         if not os.path.exists(file_path):
             open(file_path, 'w').close()  # Create empty file if not exists
             if self.debug:
-                print(f"\033[32m    Created empty MD file: \033[35m{file_path}\033[0m")
+                self.debugger.success(f"Created empty MD file: {file_path}")
 
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
@@ -987,7 +1173,7 @@ class File:
         if not os.path.exists(file_path):
             open(file_path, 'w').close()  # Create empty file if not exists
             if self.debug:
-                print(f"\033[32m    Created empty file: \033[35m{file_path}\033[0m")
+                self.debugger.success(f"Created empty file: {file_path}")
 
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
@@ -1008,7 +1194,7 @@ class File:
         with open(file_path, mode, encoding='utf-8') as f:
             f.write(content)
         if self.debug:
-            print(f"\033[32m    Wrote to file: \033[35m{file_path}")
+            self.debugger.success(f"Wrote to file: {file_path}")
 
     def html_read(self, path: str) -> str:
         """
