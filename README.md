@@ -1,6 +1,11 @@
 # Young Lion Python Library
 
-[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](https://choosealicense.com/licenses/mit/)
+[![PyPI](https://img.shields.io/pypi/v/YoungLion.svg?color=gold&logo=python&logoColor=white)](https://pypi.org/project/YoungLion)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://choosealicense.com/licenses/mit/)
+[![Python Version](https://img.shields.io/badge/python-3.7%2B-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
+[![issues](https://img.shields.io/github/issues/Cavanshirpro/YoungLionPythonLibrary?logo=github&logoColor=white)](https://github.com/Cavanshirpro/YoungLionPythonLibrary/issues)
+[![stars](https://img.shields.io/github/stars/Cavanshirpro/YoungLionPythonLibrary?logo=github&logoColor=white&style=flat-square)](https://github.com/Cavanshirpro/YoungLionPythonLibrary/)
+
 
 The **Young Lion Python Library** is designed to simplify the work of developers, especially *Young Lion Developers*. This library provides a wide range of functionalities for handling various file formats, managing directories, and executing file-related operations efficiently.
 
@@ -9,21 +14,21 @@ This library is under development and will be expanded with more features in the
 ---
 
 ## Unlike 0.0.7:
-We fixed some minor bugs in VISTA in version 0.0.7.1. We did not make the version 0.0.8 because there were no major changes. (0.0.7.2, 0.0.7.3)
-In 0.0.7.4 we colored some terminal text.
-In 0.0.7.6 New functions have been added to the File class. move_folder move_file copy_file create_folder
-In 0.0.7.8 We optimized functions
+ - We fixed some minor bugs in VISTA in version 0.0.7.1. We did not make the version 0.0.8 because there were no major changes. (0.0.7.2, 0.0.7.3)
+ - In 0.0.7.4 we colored some terminal text.
+ - In 0.0.7.6 New functions have been added to the File class. move_folder move_file copy_file create_folder
+ - In 0.0.7.8 We optimized functions
 ## Unlike 0.0.8:
-0.0.8 We add new search module
-0.0.8.2 Added some small functions to File class
+ - 0.0.8 We add new search module
+ - 0.0.8.2 Added some small functions to File class
 ## Unlike 0.0.9:
-0.0.9 We add minigames in library
-0.0.9.1 Some bugs have been fixed and hangman word data has been improved.
-0.0.9.2 A custom feature has arrived for you to integrate XOX and Hangman games into your own interface and applications.
-0.0.9.4 We add Terminal Module in library
-0.0.9.6 We added ANCI and untils to the terminal module.
-0.0.9.7 I came to the decision to divide the library into categories
-
+ - 0.0.9 We add minigames in library
+ - 0.0.9.1 Some bugs have been fixed and hangman word data has been improved.
+ - 0.0.9.2 A custom feature has arrived for you to integrate XOX and Hangman games into your own interface and applications.
+ - 0.0.9.4 We add Terminal Module in library
+ - 0.0.9.6 We added ANCI and untils to the terminal module.
+ - 0.0.9.7 I came to the decision to divide the library into categories
+ - 0.0.9.8 We add Debugger, DDM (Dynamic Data Model) and Colors
 ---
 
 ## Table of Contents
@@ -32,9 +37,12 @@ In 0.0.7.8 We optimized functions
 - [Modules](#modules)
   - [Functions](#functions)
   - [Search](#search)
+  - [DataModel](#DataModel)
+  - [Colors](#Colors)
 - [Usage Examples](#usage-examples)
   - [File Module Example](#file-module-example)
   - [Search Module Example](#search-module-example)
+  - [DataModel Module Example](#datamodel=module-example)
 - [Changelog](#changelog)
 - [License](#license)
 - [Contributing](#contributing) (Optional: Add details if applicable)
@@ -65,6 +73,8 @@ The library is organized into the following modules:
 
 - ### Functions
 - ### Search
+- ### DataModel
+- ### Colors
 ---
 
 ## Functions Features and Overview
@@ -112,7 +122,7 @@ This module contains a very comprehensive set of Python classes that perform var
 
 ---
 
-#### **3. `TaskScheduler` Class
+#### **3. `TaskScheduler` Class**
 - **Purpose**: Schedule, pause, resume and cancel tasks.
 - **Supported Functions**:
   - Create one-off or repetitive tasks.
@@ -156,6 +166,16 @@ This module contains a very comprehensive set of Python classes that perform var
   - Text replacement and summarization.
   - Finding the most frequently used words.
   - Readability score calculation.
+
+---
+
+#### **8. `Debugger` Class**
+- **Purpose**: Easy Debugging
+- **Key Features**:
+  - Colorized
+  - Symbolized
+  - Ready Debug Types
+  - Custom debugging function
 
 ---
 
@@ -203,32 +223,205 @@ print(results)  # Output: [{'title': 'Quantum Theory', 'link': 'example.com/qm'}
 
 With the **Search** module, you can implement a high-performance keyword search engine with minimal effort.
 
-# Terminal Feature and Overview
+---
 
-We created this module to make some of your operations easier in the programs you will perform via the terminal.
+## DataModel Features and Overview
 
-- ## Terminal Loader
-### Overview
-With this feature, you will be able to create a loading bar in the terminal very easily in your own codes.
+The **DataModel** module provides a flexible and powerful system for managing hierarchical structured data in Python. It allows you to easily store, manipulate, and serialize nested data models while providing a readable, colorized console output.
+
+### **Key Features**
+
+* **Dynamic Data Wrapping (`DDM` class)**:
+
+  * Wraps input dictionaries into dynamic Python objects.
+  * Automatically assigns dictionary keys as object attributes.
+  * Handles nested dictionaries, lists, tuples, and other `DDM` objects.
+  * Provides recursive serialization via `.to_dict()`.
+
+* **Hierarchical Pretty Printing**:
+
+  * Dynamic `__str__` method generates human-readable, indented strings.
+  * Nested `DDM` objects are automatically indented based on their level.
+  * ANSI colors are supported for terminals (Windows, Linux, Mac).
+  * Keys and values are colorized for better readability.
+
+* **Subclassing for Custom Models**:
+
+  * Easily extend `DDM` to create application-specific data models.
+  * Supports nested child objects as part of the parent model.
+
+* **Serialization Support**:
+
+  * `to_dict()` converts the object and all nested DDM instances into a JSON-serializable dictionary.
+  * Ignored private attributes (those starting with `_`) to avoid unnecessary clutter.
+
+---
+
+### **Classes**
+
+* `DDM`: Base class for all dynamic data models.
+* `Colors`: ANSI color definitions for console output (optional).
+* Extend `DDM` to define your own structured models, e.g. `Person`, `ClassData`, `UserData`.
+
+---
 
 ### **Usage Example**
 
 ```python
-import time
-from YoungLion.terminal import TerminalBar # Corrected import path if necessary
+from YoungLion import DDM
 
-print("Test Starting:\n\n")
-total_size = 1024*1024
-bar = TerminalBar(total_size, 0, 100) # Initialize bar
+# Define a custom model by subclassing DDM
+class Child(DDM):
+    pass
 
-# Simulate progress
-for i in range(0, total_size + 1, total_size // 10):
-    bar.update(i)
-    time.sleep(0.1)
-print("\nLoading Complete!")
+class Person(DDM):
+    def __init__(self, data):
+        super().__init__(data)
+        self.children = [Child(c) for c in data.get("children", [])]
+
+# Sample hierarchical data
+data = {
+    "name": "Alice",
+    "age": 30,
+    "address": {"city": "NY", "zip": "10001"},
+    "children": [
+        {"name": "Bob", "age": 5},
+        {"name": "Charlie", "age": 3}
+    ]
+}
+
+# Initialize the model
+person = Person(data)
+
+# Pretty-print to console
+print(person)
+
+# Serialize to dictionary for JSON or storage
+print(person.to_dict())
 ```
 
 ---
+
+### **Example Output (Pretty Console Print)**
+
+```
+name: Alice
+age: 30
+address:
+    city: NY
+    zip: 10001
+children:
+    - name: Bob
+      age: 5
+    - name: Charlie
+      age: 3
+```
+
+> Notes: Keys are colored (blue) and values are colored (green) if the terminal supports ANSI colors.
+
+---
+
+### **Benefits**
+
+* Simplifies working with hierarchical JSON-like structures.
+* Ideal for **nested configuration**, **user data**, **class data**, and **any structured dataset**.
+* Provides professional console output with **dynamic colors and indentation**.
+* Fully extendable for any custom application.
+
+---
+
+
+---
+
+## ColorsFeatures and Overview 
+
+The **Colors** module provides a comprehensive set of ANSI escape codes for terminal text formatting.
+It is designed to be simple, flexible, and professional for Python projects.
+
+Using this module, you can add colored, styled, and visually distinctive text to your terminal output, making your scripts and applications more readable and user-friendly.
+
+---
+
+## Features
+
+* **Text Colors**
+  Foreground text colors for standard and bright variants:
+  `BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE` and their bright counterparts.
+
+* **Background Colors**
+  Background colors for standard and bright variants:
+  `BG_BLACK, BG_RED, BG_GREEN, BG_YELLOW, BG_BLUE, BG_MAGENTA, BG_CYAN, BG_WHITE` and bright versions.
+
+* **Text Styles**
+  Easily apply styles such as:
+  `RESET, BRIGHT, DIM, ITALIC, UNDERLINE, BLINK, REVERSE, HIDDEN, STRIKETHROUGH`
+
+* **Cross-Platform**
+  Works on Windows, Linux, and Mac terminals. ANSI support is automatically enabled if necessary.
+
+* **Professional Integration**
+  Fully class-based, easy to import and use in any Python project. Works well with **DataModel**, **Terminal utilities**, or other console-based scripts.
+
+---
+
+## Installation
+
+Just include `Colors` in your project and import the class:
+
+```python
+from YoungLion import Colors
+```
+
+No external dependencies are required.
+
+---
+
+## Usage Examples
+
+### Basic Usage
+
+```python
+from YoungLion import Colors
+
+print(f"{Colors.RED}This is red text{Colors.RESET}")
+print(f"{Colors.BRIGHT_GREEN}Bright green text{Colors.RESET}")
+print(f"{Colors.UNDERLINE}{Colors.CYAN}Underlined cyan text{Colors.RESET}")
+print(f"{Colors.BG_BLUE}{Colors.WHITE}White text on blue background{Colors.RESET}")
+```
+
+### Combining Styles
+
+```python
+print(f"{Colors.BRIGHT}{Colors.MAGENTA}Bright magenta text{Colors.RESET}")
+print(f"{Colors.REVERSE}{Colors.YELLOW}Reversed yellow text{Colors.RESET}")
+print(f"{Colors.BLINK}{Colors.RED}Blinking red text (may not work on all terminals){Colors.RESET}")
+```
+
+### Example with DataModel Integration
+
+```python
+from YoungLion import DDM,Colors
+
+class Person(DDM):
+    pass
+
+data = {"name": "Alice", "age": 30}
+person = Person(data)
+
+# Use Colors to highlight keys or values
+print(f"{Colors.BLUE}Person Info:{Colors.RESET}")
+print(person)
+```
+
+
+
+---
+
+## Notes
+
+* ANSI codes are supported in most modern terminals. On Windows, ensure ANSI processing is enabled (via the `enable_ansi()` function in your projects if necessary).
+* Reset the formatting after applying any color or style to prevent bleed
+
 
 # Usage/Examples
 
