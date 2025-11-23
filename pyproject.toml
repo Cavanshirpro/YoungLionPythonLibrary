@@ -1,0 +1,44 @@
+[project]
+name = "YoungLion"
+version = "0.0.9.8"
+authors = [
+  { name="Cavanşir Qurbanzadə", email="cavanshirpro@gmail.com" },
+]
+description = "It is a library whose main purpose is to make the work of YoungLion developers easier."
+readme = "README.md"
+requires-python = ">=3.7"
+keywords = ["YoungLion", "Young Lion", "Cavanshirpro"]
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = [
+    "PyYAML",
+    "PyPDF2",
+    "reportlab",
+    "Pillow",
+    "matplotlib",
+    "tqdm",
+    "paramiko",
+    "pylatexenc",
+    "markdown2",
+]
+
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+[tool.setuptools]
+packages = { find = { where = ["src"] } }
+include-package-data = true
+
+[tool.setuptools.package-data]
+YoungLion = ["static/*"]
+
+[build-system]
+requires = ["setuptools >= 77.0.3"]
+build-backend = "setuptools.build_meta"

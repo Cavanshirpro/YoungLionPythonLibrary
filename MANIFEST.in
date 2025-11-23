@@ -1,0 +1,8 @@
+include README.md
+include LICENSE
+include requirements.txt
+include src/YoungLion/static/*
+recursive-include src/YoungLion/game *
+recursive-include src/YoungLion/game/minigame *
+recursive-include src/YoungLion/VISTA *
+recursive-exclude __pycache__ *

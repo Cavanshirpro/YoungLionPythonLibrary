@@ -1,0 +1,47 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.so
+
+# Virtual environment
+.env/
+.venv/
+env/
+venv/
+ENV/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Editor / IDE-specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+
+# Test results
+*.out
+*.pytest_cache/
+*.coverage
+
+# Ignore temporary files
+*.tmp
+*.bak
+*.old
+
+# Custom static and output files
+output/
+static/
+
+# Private keys or environment files
+*.key
+*.env
