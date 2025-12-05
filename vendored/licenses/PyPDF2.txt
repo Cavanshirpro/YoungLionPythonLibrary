@@ -1,0 +1,3 @@
+﻿Package: PyPDF2
+License: 
+

@@ -1,0 +1,3 @@
+﻿Package: ffmpeg-python
+License: UNKNOWN
+

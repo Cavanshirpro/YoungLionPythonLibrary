@@ -1,0 +1,3 @@
+﻿Package: pylatexenc
+License: MIT
+
