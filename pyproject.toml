@@ -84,11 +84,11 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/cavanshirpro/YoungLion"
-Repository = "https://github.com/cavanshirpro/YoungLion.git"
-Documentation = "https://github.com/cavanshirpro/YoungLion#readme"
-"Bug Tracker" = "https://github.com/cavanshirpro/YoungLion/issues"
-"Source Code" = "https://github.com/cavanshirpro/YoungLion"
+Homepage = "https://github.com/Cavanshirpro/YoungLionPythonLibrary"
+Repository = "https://github.com/Cavanshirpro/YoungLionPythonLibrary.git"
+Documentation = "https://github.com/Cavanshirpro/YoungLionPythonLibrary#readme"
+"Bug Tracker" = "https://github.com/Cavanshirpro/YoungLionPythonLibrary/issues"
+"Source Code" = "https://github.com/Cavanshirpro/YoungLionPythonLibrary"
 
 [tool.setuptools]
 packages = { find = { where = ["src"] } }

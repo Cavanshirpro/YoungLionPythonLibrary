@@ -391,7 +391,7 @@ pip install YoungLion
 
 ### **From Source**
 ```bash
-git clone https://github.com/cavanshirpro/YoungLion.git
+git clone https://github.com/Cavanshirpro/YoungLionPythonLibrary.git
 cd YoungLion
 pip install .
 ```
@@ -455,7 +455,7 @@ completed = sc.complete({"name": "Alice", "age": 30})
 
 - **Developer:** Cavanşir Qurbanzadə
 - **Email:** cavanshirpro@gmail.com
-- **Repository:** https://github.com/cavanshirpro/YoungLion
+- **Repository:** https://github.com/Cavanshirpro/YoungLionPythonLibrary
 
 ---
 
@@ -467,10 +467,10 @@ None reported. This is a production-ready stable release.
 
 ## 🔗 **Useful Links**
 
-- 📖 [Documentation](https://github.com/cavanshirpro/YoungLion#readme)
-- 🐛 [Issue Tracker](https://github.com/cavanshirpro/YoungLion/issues)
+- 📖 [Documentation](https://github.com/Cavanshirpro/YoungLionPythonLibrary#readme)
+- 🐛 [Issue Tracker](https://github.com/Cavanshirpro/YoungLionPythonLibrary/issues)
 - 📦 [PyPI Package](https://pypi.org/project/YoungLion/)
-- 💻 [Source Code](https://github.com/cavanshirpro/YoungLion)
+- 💻 [Source Code](https://github.com/Cavanshirpro/YoungLionPythonLibrary)
 - 🔨 [Build Guide](./BUILD.md)
 
 ---
@@ -487,4 +487,4 @@ v0.0.9.10 will include:
 
 **Thank you for using YoungLion!** 🦁
 
-For questions, issues, or suggestions, please visit our [GitHub repository](https://github.com/cavanshirpro/YoungLion).
+For questions, issues, or suggestions, please visit our [GitHub repository](https://github.com/Cavanshirpro/YoungLionPythonLibrary).

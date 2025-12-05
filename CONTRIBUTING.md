@@ -48,13 +48,13 @@ Please treat all contributors with respect. We aim to maintain a welcoming, incl
 1. Fork the repository on GitHub
 2. Clone your fork:
 ```bash
-git clone https://github.com/YOUR_USERNAME/YoungLion.git
+git clone https://github.com/YOUR_USERNAME/YoungLionPythonLibrary.git
 cd YoungLion
 ```
 
 3. Add upstream remote:
 ```bash
-git remote add upstream https://github.com/cavanshirpro/YoungLion.git
+git remote add upstream https://github.com/Cavanshirpro/YoungLionPythonLibrary.git
 ```
 
 ---
@@ -474,8 +474,8 @@ With Python versions: 3.7, 3.8, 3.9, 3.10, 3.11, 3.12
 ## Questions or Need Help?
 
 - 📧 Email: cavanshirpro@gmail.com
-- 🐛 Issues: https://github.com/cavanshirpro/YoungLion/issues
-- 💬 Discussions: https://github.com/cavanshirpro/YoungLion/discussions
+- 🐛 Issues: https://github.com/Cavanshirpro/YoungLionPythonLibrary/issues
+- 💬 Discussions: https://github.com/Cavanshirpro/YoungLionPythonLibrary/discussions
 
 ---
 
