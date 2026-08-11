@@ -1,0 +1,84 @@
+name: YoungLion Windows CI & Release
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-test:
+    name: Build & Test on Windows ${{ matrix.python-version }}
+    runs-on: windows-latest
+
+    strategy:
+      matrix:
+        python-version: [ "3.10", "3.11", "3.12" ]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Upgrade pip and install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build wheel twine black
+
+      - name: Check code formatting with Black
+        run: |
+          black --check .
+
+      - name: Install the package
+        run: |
+          pip install .
+
+      - name: Import modules to verify
+        run: |
+          python -c "import YoungLion; import YoungLion.DataModel; import YoungLion.Colors; print('Imports successful')"
+
+      - name: Run unit tests (if tests folder exists)
+        run: |
+          if (Test-Path -Path "./tests") { python -m unittest discover -s tests } else { Write-Host 'No tests folder found'; }
+
+      - name: Build the package
+        run: |
+          python -m build
+
+  release:
+    name: Release v0.0.9.8
+    needs: build-test
+    runs-on: windows-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Bump version to 0.0.9.8 and tag
+        run: |
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+          git tag -a v0.0.9.8 -m "Release v0.0.9.8"
+          git push origin v0.0.9.8
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v4
+        with:
+          tag_name: v0.0.9.8
+          name: v0.0.9.8
+          body: |
+            Release v0.0.9.8 — added Debugger, DDM (DataModel) and Colors module.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
