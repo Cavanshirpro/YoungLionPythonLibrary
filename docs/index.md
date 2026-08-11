@@ -22,6 +22,7 @@ This directory is the complete documentation hub for YoungLion 0.1.0.
 
 ## Guides
 - [DDM data modeling](guides/ddm-data-modeling.md)
+- [Typed DDM subclass modeling](guides/typed-ddm-subclasses.md)
 - [Choosing a DDM variant](guides/choosing-ddm-variant.md)
 - [Large datasets](guides/large-datasets.md)
 - [Batch processing](guides/batch-processing.md)
@@ -41,6 +42,7 @@ This directory is the complete documentation hub for YoungLion 0.1.0.
 
 ## Development and release
 - [Building](development/building.md)
+- [Updating main from a source ZIP](development/updating-main-from-source-zip.md)
 - [CI](development/ci.md)
 - [Release bundle](development/release-bundle.md)
 - [Manual PyPI publishing](development/manual-pypi-publish.md)

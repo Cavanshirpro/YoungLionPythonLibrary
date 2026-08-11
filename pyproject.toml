@@ -81,3 +81,9 @@ skip = []
 test-command = "python -c \"from YoungLion import DDM, File; from YoungLion.search import SearchIndex; assert DDM({'x': 1}).to_dict()['x'] == 1; assert SearchIndex(['native search']).search('native'); assert File is not None\""
 test-skip = ["*-win_arm64"]
 build-verbosity = 1
+
+[tool.cibuildwheel.macos.environment]
+# YoungLion uses C++17 std::filesystem. Intel CPython 3.10/3.11 can otherwise
+# inherit a 10.9 deployment target, which is too old for these libc++ APIs.
+# cibuildwheel automatically raises this to macOS 11 for Apple Silicon.
+MACOSX_DEPLOYMENT_TARGET = "10.15"

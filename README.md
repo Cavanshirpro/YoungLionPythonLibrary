@@ -97,6 +97,66 @@ print(user.to_json(indent=2))
 
 DDM is deliberately dynamic: it is useful when your structure is known at runtime, evolves over time, comes from JSON-like data, or must remain easy to inspect and serialize.
 
+## Typed DDM subclasses: model your own domain classes
+
+`DDM` is intentionally subclass-friendly. For application code, a useful pattern is to keep the native/dynamic storage and serialization behavior from `DDM`, while normalizing the fields that your domain actually understands into typed attributes and nested DDM subclasses.
+
+```python
+from collections.abc import Mapping
+from typing import Any
+from YoungLion import DDM
+
+
+class UserProfile(DDM):
+    name: str
+    country: str
+    age: int
+
+    def __init__(self, data: Mapping[str, Any]):
+        super().__init__(data)
+        self.name = str(data.get("name", "Unknown"))
+        self.country = str(data.get("country", "Unknown"))
+        self.age = max(0, int(data.get("age", 0)))
+
+    @property
+    def is_adult(self) -> bool:
+        return self.age >= 18
+
+
+class User(DDM):
+    id: int
+    username: str
+    profile: UserProfile
+
+    def __init__(self, data: Mapping[str, Any]):
+        super().__init__(data)
+        self.id = int(data.get("id", 0))
+        self.username = str(data.get("username", "unknown"))
+        self.profile = UserProfile(data.get("profile", {}))
+
+    def rename(self, value: str) -> None:
+        value = value.strip()
+        if not value:
+            raise ValueError("username cannot be empty")
+        self.username = value
+
+
+user = User({
+    "id": 42,
+    "username": "cavan",
+    "profile": {"name": "Cavan", "country": "AZ", "age": 18},
+})
+
+print(user.profile.name)
+print(user.profile.is_adult)
+print(user.get_path("profile.country"))
+print(user.to_dict())
+```
+
+This pattern is useful because it does **not** replace DDM with a conventional dataclass. The object still participates in native DDM serialization, nested-path search, `ListDDM` batch operations and `DDMSearchEngine`; your subclass simply adds domain validation, methods, type annotations and nested models.
+
+For larger projects, keep models, repositories/search indexes and services in separate modules instead of putting every rule in `__init__`. See [Typed DDM subclass modeling](docs/guides/typed-ddm-subclasses.md). The separate `examples` branch contains complete multi-file projects built around this style.
+
 ### Choosing a DDM variant
 
 | Type | Best fit |
@@ -239,6 +299,19 @@ The search module includes:
 The algorithms are exposed as building blocks as well as through higher-level search classes. See [Search algorithms](docs/reference/search-algorithms.md) for when each one is appropriate.
 
 ---
+
+# Real-life example projects
+
+The main branch intentionally stays focused on the library itself. A separate **`examples` branch in this same repository** is intended for large, runnable mini-projects rather than tiny snippets:
+
+- typed `class User(DDM)` / nested-model designs;
+- large `ListDDM`/`SetDDM`/`DictDDM` batch pipelines;
+- reusable nested-path indexes;
+- application search backends;
+- File/configuration/ETL workflows;
+- integrated scheduler/cache/logger/resilience examples.
+
+After the branch is pushed, browse it at [`examples` branch](https://github.com/Cavanshirpro/YoungLionPythonLibrary/tree/examples).
 
 # File workflows
 

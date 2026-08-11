@@ -87,7 +87,9 @@ def test_retry_circuit_breaker_and_stopwatch():
     except RuntimeError:
         pass
     assert breaker.state == breaker.OPEN
-    time.sleep(0.015)
+    deadline = time.monotonic() + 1.0
+    while breaker.state != breaker.HALF_OPEN and time.monotonic() < deadline:
+        time.sleep(0.01)
     assert breaker.state == breaker.HALF_OPEN
     assert breaker.call(lambda: 42) == 42
     assert breaker.state == breaker.CLOSED

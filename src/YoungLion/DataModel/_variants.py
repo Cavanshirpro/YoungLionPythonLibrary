@@ -85,6 +85,9 @@ class FrozenDDM(DDM):
     clear = _immutable
     compact = _immutable
 
+    def _clone_construct(self, data: Mapping[str, Any]) -> "FrozenDDM":
+        return FrozenDDM(data)
+
     def thaw(self) -> DDM:
         return DDM(self.to_dict())
 
@@ -202,6 +205,9 @@ class SchemaDDM(DDM):
         if strict and not bool(result.get("valid", not result)):
             raise ValueError(f"schema validation failed: {result}")
 
+    def _clone_construct(self, data: Mapping[str, Any]) -> "SchemaDDM":
+        return SchemaDDM(data, self._schema or {}, strict=self._strict_schema)
+
     def validate(self) -> Dict[str, Any]:
         return self.validate_schema(self._schema or {})
 
@@ -229,6 +235,9 @@ class DefaultDDM(DDM):
         super().__init__(data)
         object.__setattr__(self, "_default_factory", default_factory)
 
+    def _clone_construct(self, data: Mapping[str, Any]) -> "DefaultDDM":
+        return DefaultDDM(data, default_factory=self._default_factory)
+
     def __getattr__(self, name: str) -> Any:
         value = self._default_factory()
         self.__dict__[name] = value
@@ -254,6 +263,12 @@ class LazyDDM(DDM):
     def __init__(self, data: Mapping[str, Any], lazy: Optional[Mapping[str, Callable[["LazyDDM"], Any]]] = None):
         super().__init__(data)
         object.__setattr__(self, "_lazy", dict(lazy or {}))
+
+    def _clone_construct(self, data: Mapping[str, Any]) -> "LazyDDM":
+        # Keep lazy definitions but do not copy already materialized derived
+        # values as authoritative cache entries. They are present in data for
+        # round-trip compatibility and can be explicitly invalidated by callers.
+        return LazyDDM(data, lazy=self._lazy)
 
     def __getattr__(self, name: str) -> Any:
         lazy = self._lazy

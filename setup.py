@@ -1,7 +1,24 @@
 from __future__ import annotations
 
 import os
+import platform
 import sys
+
+# std::filesystem is used by the native extension.  Older CPython macOS
+# installers may default to a 10.9 deployment target, where libc++ does not
+# expose the filesystem APIs we use.  Set a conservative floor before
+# setuptools reads Python's build configuration.  cibuildwheel can still
+# override this explicitly for a particular wheel.
+if sys.platform == "darwin":
+    _machine = platform.machine()
+    _default_macos_target = "11.0" if _machine == "arm64" else "10.15"
+    os.environ.setdefault("MACOSX_DEPLOYMENT_TARGET", _default_macos_target)
+    # python.org installers can carry universal2 sysconfig flags even when a
+    # developer only wants a native local build.  Prefer the host architecture
+    # unless a wheel builder/user explicitly supplied ARCHFLAGS.
+    if _machine in {"arm64", "x86_64"}:
+        os.environ.setdefault("ARCHFLAGS", f"-arch {_machine}")
+
 from setuptools import Extension, setup
 
 DEBUG = os.environ.get("YOUNGLION_NATIVE_DEBUG") == "1"
@@ -30,7 +47,9 @@ else:
             compile_args += ["-fno-semantic-interposition"]
             link_args += ["-Wl,--gc-sections"]
         if sys.platform == "darwin":
-            link_args += ["-Wl,-dead_strip"]
+            macos_target = os.environ["MACOSX_DEPLOYMENT_TARGET"]
+            compile_args += [f"-mmacosx-version-min={macos_target}"]
+            link_args += ["-Wl,-dead_strip", f"-mmacosx-version-min={macos_target}"]
         if USE_LTO:
             compile_args += ["-flto"]
             link_args += ["-flto"]

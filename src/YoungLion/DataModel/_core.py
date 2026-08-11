@@ -78,8 +78,22 @@ class DDM:
         if self.__class__ is DDM:
             obj = DDM(data)
         else:
-            obj = self.__class__.__new__(self.__class__)
-            DDM.__init__(obj, data)
+            # Typed application subclasses conventionally accept one mapping in
+            # __init__. Re-running that constructor preserves nested model types
+            # such as User.profile -> UserProfile instead of degrading them to
+            # plain dictionaries. Built-in variants with additional constructor
+            # state provide a private _clone_construct hook.
+            construct = getattr(self, "_clone_construct", None)
+            if construct is not None:
+                obj = construct(data)
+            else:
+                try:
+                    obj = self.__class__(data)
+                except TypeError:
+                    # Compatibility fallback for legacy DDM subclasses whose
+                    # constructor requires a non-standard signature.
+                    obj = self.__class__.__new__(self.__class__)
+                    DDM.__init__(obj, data)
         if isinstance(self._schema, dict):
             object.__setattr__(obj, "_schema", _native.ddm_clone_data(DDM(self._schema)))
         else:

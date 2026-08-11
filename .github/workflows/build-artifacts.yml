@@ -23,9 +23,10 @@ env:
   CIBUILDWHEEL_VERSION: "4.1.1"
 
 jobs:
-  sdist:
-    name: Source distribution
+  preflight:
+    name: Release preflight
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     outputs:
       version: ${{ steps.package_version.outputs.value }}
     steps:
@@ -35,10 +36,11 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.14"
-      - name: Read package version
+      - name: Read and verify package version
         id: package_version
         shell: bash
         run: |
+          set -euo pipefail
           VERSION="$(python - <<'PY'
           import tomllib
           with open('pyproject.toml', 'rb') as f:
@@ -46,6 +48,42 @@ jobs:
           PY
           )"
           echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+          if [[ "${GITHUB_REF_TYPE:-}" == "tag" && "${GITHUB_REF_NAME}" != "v${VERSION}" ]]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match project version v${VERSION}." >&2
+            exit 1
+          fi
+      - name: Reject legacy automatic release workflow
+        shell: bash
+        run: |
+          if [[ -f .github/workflows/younglion-ci.yml ]]; then
+            echo "Legacy younglion-ci.yml is still present and contains old release logic." >&2
+            exit 1
+          fi
+      - name: Strict native build and tests
+        env:
+          YOUNGLION_STRICT: "1"
+          PYTHONPATH: src
+        run: |
+          python -m pip install --upgrade pip setuptools wheel pytest
+          python setup.py build_ext --inplace --force
+          python -m compileall -q src tools tests
+          python tools/smoke_test.py
+          python -m pytest -q
+          if [[ -f tools/check_stub_coverage.py ]]; then
+            python tools/check_stub_coverage.py
+          fi
+
+  sdist:
+    needs: preflight
+    name: Source distribution
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
       - name: Build and validate sdist
         run: |
           python -m pip install --upgrade pip build twine
@@ -60,6 +98,7 @@ jobs:
           retention-days: 30
 
   wheels:
+    needs: preflight
     name: Wheels / ${{ matrix.label }}
     strategy:
       fail-fast: false
@@ -132,6 +171,7 @@ jobs:
           retention-days: 14
 
   windows-arm64-preview:
+    needs: preflight
     name: Experimental Windows ARM64
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.include_experimental }}
     runs-on: windows-11-arm
@@ -158,6 +198,7 @@ jobs:
           retention-days: 14
 
   linux-emulated-architectures:
+    needs: preflight
     name: Experimental Linux / ppc64le-s390x-armv7l-riscv64
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.include_experimental }}
     runs-on: ubuntu-24.04
@@ -187,6 +228,7 @@ jobs:
           retention-days: 14
 
   experimental-portable-platforms:
+    needs: preflight
     name: Experimental ${{ matrix.label }}
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.include_experimental }}
     strategy:
@@ -236,6 +278,7 @@ jobs:
           retention-days: 14
 
   experimental-cpython315:
+    needs: preflight
     name: Experimental CPython 3.15 / ${{ matrix.label }}
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.include_experimental }}
     strategy:
@@ -275,7 +318,7 @@ jobs:
   bundle:
     name: Assemble one PyPI-ready bundle
     if: ${{ always() && needs.sdist.result == 'success' && needs.wheels.result == 'success' }}
-    needs: [sdist, wheels, windows-arm64-preview, linux-emulated-architectures, experimental-portable-platforms, experimental-cpython315]
+    needs: [preflight, sdist, wheels, windows-arm64-preview, linux-emulated-architectures, experimental-portable-platforms, experimental-cpython315]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
@@ -294,7 +337,7 @@ jobs:
         env:
           GIT_SHA: ${{ github.sha }}
           RUN_ID: ${{ github.run_id }}
-          PACKAGE_VERSION: ${{ needs.sdist.outputs.version }}
+          PACKAGE_VERSION: ${{ needs.preflight.outputs.version }}
         run: |
           set -euo pipefail
           python tools/assemble_release_bundle.py \
@@ -309,7 +352,7 @@ jobs:
       - name: Upload the single release bundle
         uses: actions/upload-artifact@v7
         with:
-          name: YoungLion-${{ needs.sdist.outputs.version }}-release-bundle
-          path: YoungLion-${{ needs.sdist.outputs.version }}-release-bundle/
+          name: YoungLion-${{ needs.preflight.outputs.version }}-release-bundle
+          path: YoungLion-${{ needs.preflight.outputs.version }}-release-bundle/
           if-no-files-found: error
           retention-days: 30

@@ -28,8 +28,10 @@ double jaro_score(const std::vector<Py_UCS4>&s1,const std::vector<Py_UCS4>&s2){
     if(!matches) return 0.0;
     size_t k=0,t=0;
     for(size_t i=0;i<s1.size();++i) if(m1[i]){while(!m2[k])++k;if(s1[i]!=s2[k])++t;++k;}
-    double mt=matches;
-    return (mt/s1.size()+mt/s2.size()+(mt-t/2.0)/mt)/3.0;
+    const double mt=static_cast<double>(matches);
+    const double s1_size=static_cast<double>(s1.size());
+    const double s2_size=static_cast<double>(s2.size());
+    return (mt/s1_size+mt/s2_size+(mt-static_cast<double>(t)/2.0)/mt)/3.0;
 }
 uint64_t trigram_key(Py_UCS4 a,Py_UCS4 b,Py_UCS4 c){return ((uint64_t)a<<42)^((uint64_t)b<<21)^(uint64_t)c;}
 double trigram_score(const std::vector<Py_UCS4>&a,const std::vector<Py_UCS4>&b){
@@ -40,11 +42,69 @@ double trigram_score(const std::vector<Py_UCS4>&a,const std::vector<Py_UCS4>&b){
     for(size_t i=0;i+2<b.size();++i)y.insert(trigram_key(b[i],b[i+1],b[i+2]));
     size_t inter=0;
     for(auto k:x)if(y.count(k))++inter;
-    return x.empty()&&y.empty()?1.0:(2.0*inter)/(x.size()+y.size());
+    if(x.empty()&&y.empty()) return 1.0;
+    const double intersection=static_cast<double>(inter);
+    const double total=static_cast<double>(x.size()+y.size());
+    return (2.0*intersection)/total;
 }
 PyObject* n_levenshtein(PyObject*,PyObject* args){PyObject*a,*b;if(!PyArg_ParseTuple(args,"OO",&a,&b))return nullptr;try{return PyLong_FromSize_t(levenshtein_distance(unicode_chars(a),unicode_chars(b)));}catch(const std::exception&e){return exception_from_cpp(e);}}
 PyObject* n_damerau(PyObject*,PyObject* args){PyObject*a,*b;if(!PyArg_ParseTuple(args,"OO",&a,&b))return nullptr;try{return PyLong_FromSize_t(damerau_distance(unicode_chars(a),unicode_chars(b)));}catch(const std::exception&e){return exception_from_cpp(e);}}
 PyObject* n_jaro_winkler(PyObject*,PyObject* args){PyObject*a,*b;double p=0.1;if(!PyArg_ParseTuple(args,"OO|d",&a,&b,&p))return nullptr;try{auto x=unicode_chars(a),y=unicode_chars(b);double j=jaro_score(x,y);size_t prefix=0;while(prefix<std::min<size_t>({4,x.size(),y.size()})&&x[prefix]==y[prefix])++prefix;return PyFloat_FromDouble(j+prefix*p*(1.0-j));}catch(const std::exception&e){return exception_from_cpp(e);}}
 PyObject* n_trigram_similarity(PyObject*,PyObject* args){PyObject*a,*b;if(!PyArg_ParseTuple(args,"OO",&a,&b))return nullptr;try{return PyFloat_FromDouble(trigram_score(unicode_chars(a),unicode_chars(b)));}catch(const std::exception&e){return exception_from_cpp(e);}}
 PyObject* n_find_all(PyObject*,PyObject* args){PyObject*h,*n;if(!PyArg_ParseTuple(args,"OO",&h,&n))return nullptr;try{auto text=unicode_chars(h),needle=unicode_chars(n);PyObject*out=PyList_New(0);if(needle.empty())return out;if(needle.size()>text.size())return out;std::unordered_map<Py_UCS4,size_t>skip;for(size_t i=0;i+1<needle.size();++i)skip[needle[i]]=needle.size()-1-i;size_t i=0;while(i+needle.size()<=text.size()){size_t j=needle.size();while(j&&needle[j-1]==text[i+j-1])--j;if(!j){PyRef pos(PyLong_FromSize_t(i));PyList_Append(out,pos.get());++i;}else{auto it=skip.find(text[i+needle.size()-1]);i+=it==skip.end()?needle.size():std::max<size_t>(1,it->second);}}return out;}catch(const std::exception&e){return exception_from_cpp(e);}}
-PyObject* n_bm25_scores(PyObject*,PyObject* args){PyObject*q,*docs;double k1=1.5,b=0.75;if(!PyArg_ParseTuple(args,"OO|dd",&q,&docs,&k1,&b))return nullptr;try{PyRef qf(PySequence_Fast(q,"query_tokens must be a sequence")),df(PySequence_Fast(docs,"documents must be a sequence"));if(!qf||!df)return nullptr;Py_ssize_t N=PySequence_Fast_GET_SIZE(df.get());std::vector<std::string>qt;for(Py_ssize_t i=0;i<PySequence_Fast_GET_SIZE(qf.get());++i)qt.push_back(py_utf8(PySequence_Fast_GET_ITEM(qf.get(),i)));std::unordered_map<std::string,size_t>docfreq;std::vector<std::unordered_map<std::string,size_t>>freqs((size_t)N);std::vector<size_t>lens((size_t)N);double avg=0;for(Py_ssize_t d=0;d<N;++d){PyRef sf(PySequence_Fast(PySequence_Fast_GET_ITEM(df.get(),d),"document tokens must be sequences"));if(!sf)return nullptr;lens[(size_t)d]=(size_t)PySequence_Fast_GET_SIZE(sf.get());avg+=lens[(size_t)d];std::unordered_set<std::string>seen;for(Py_ssize_t i=0;i<PySequence_Fast_GET_SIZE(sf.get());++i){std::string t=py_utf8(PySequence_Fast_GET_ITEM(sf.get(),i));freqs[(size_t)d][t]++;seen.insert(t);}for(auto&t:seen)docfreq[t]++;}avg=N?avg/N:0;PyObject*out=PyList_New(N);for(Py_ssize_t d=0;d<N;++d){double score=0;for(auto&t:qt){auto tf=freqs[(size_t)d].find(t);if(tf==freqs[(size_t)d].end())continue;double n=(double)docfreq[t];double idf=std::log(1.0+(N-n+0.5)/(n+0.5));double f=(double)tf->second;double denom=f+k1*(1.0-b+b*(avg?lens[(size_t)d]/avg:0));score+=idf*(f*(k1+1.0))/denom;}PyList_SET_ITEM(out,d,PyFloat_FromDouble(score));}return out;}catch(const std::exception&e){return exception_from_cpp(e);}}
+PyObject* n_bm25_scores(PyObject*,PyObject* args){
+    PyObject*q,*docs;
+    double k1=1.5,b=0.75;
+    if(!PyArg_ParseTuple(args,"OO|dd",&q,&docs,&k1,&b)) return nullptr;
+    try{
+        PyRef qf(PySequence_Fast(q,"query_tokens must be a sequence"));
+        PyRef df(PySequence_Fast(docs,"documents must be a sequence"));
+        if(!qf||!df) return nullptr;
+
+        const Py_ssize_t N=PySequence_Fast_GET_SIZE(df.get());
+        const double document_count=static_cast<double>(N);
+        std::vector<std::string> qt;
+        for(Py_ssize_t i=0;i<PySequence_Fast_GET_SIZE(qf.get());++i)
+            qt.push_back(py_utf8(PySequence_Fast_GET_ITEM(qf.get(),i)));
+
+        std::unordered_map<std::string,size_t> docfreq;
+        std::vector<std::unordered_map<std::string,size_t>> freqs(static_cast<size_t>(N));
+        std::vector<size_t> lens(static_cast<size_t>(N));
+        double avg=0.0;
+
+        for(Py_ssize_t d=0;d<N;++d){
+            PyRef sf(PySequence_Fast(PySequence_Fast_GET_ITEM(df.get(),d),"document tokens must be sequences"));
+            if(!sf) return nullptr;
+            const size_t index=static_cast<size_t>(d);
+            lens[index]=static_cast<size_t>(PySequence_Fast_GET_SIZE(sf.get()));
+            avg+=static_cast<double>(lens[index]);
+            std::unordered_set<std::string> seen;
+            for(Py_ssize_t i=0;i<PySequence_Fast_GET_SIZE(sf.get());++i){
+                std::string token=py_utf8(PySequence_Fast_GET_ITEM(sf.get(),i));
+                freqs[index][token]++;
+                seen.insert(token);
+            }
+            for(const auto& token:seen) docfreq[token]++;
+        }
+        avg=N?avg/document_count:0.0;
+
+        PyObject*out=PyList_New(N);
+        if(!out) return nullptr;
+        for(Py_ssize_t d=0;d<N;++d){
+            const size_t index=static_cast<size_t>(d);
+            double score=0.0;
+            for(const auto& token:qt){
+                auto tf=freqs[index].find(token);
+                if(tf==freqs[index].end()) continue;
+                const double n=static_cast<double>(docfreq[token]);
+                const double idf=std::log(1.0+(document_count-n+0.5)/(n+0.5));
+                const double frequency=static_cast<double>(tf->second);
+                const double normalized_length=avg?static_cast<double>(lens[index])/avg:0.0;
+                const double denom=frequency+k1*(1.0-b+b*normalized_length);
+                score+=idf*(frequency*(k1+1.0))/denom;
+            }
+            PyList_SET_ITEM(out,d,PyFloat_FromDouble(score));
+        }
+        return out;
+    }catch(const std::exception&e){return exception_from_cpp(e);}
+}
