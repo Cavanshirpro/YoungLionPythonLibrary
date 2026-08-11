@@ -1,0 +1,3 @@
+# YoungLion 0.1 has no third-party runtime Python dependencies.
+# Development tools are declared in pyproject.toml:
+#   python -m pip install -e ".[dev]"

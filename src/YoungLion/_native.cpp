@@ -1,0 +1,13 @@
+// YoungLion native core is split into reviewable source fragments.
+#include "_native_part01.inc"
+#include "_native_part02.inc"
+#include "_native_part03.inc"
+#include "_native_part04.inc"
+#include "_native_part05.inc"
+#include "_native_part06.inc"
+#include "_native_ddm_extra.inc"
+#include "_native_search.inc"
+#include "_native_file_extra.inc"
+#include "_native_collection.inc"
+#include "_native_part07.inc"
+#include "_native_part08.inc"

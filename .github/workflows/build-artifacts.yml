@@ -1,0 +1,315 @@
+name: Build Distribution Artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      include_experimental:
+        description: "Also build experimental CPython/architectures"
+        required: false
+        default: false
+        type: boolean
+  push:
+    tags:
+      - "v0.1*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-artifacts-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CIBUILDWHEEL_VERSION: "4.1.1"
+
+jobs:
+  sdist:
+    name: Source distribution
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.package_version.outputs.value }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - name: Read package version
+        id: package_version
+        shell: bash
+        run: |
+          VERSION="$(python - <<'PY'
+          import tomllib
+          with open('pyproject.toml', 'rb') as f:
+              print(tomllib.load(f)['project']['version'])
+          PY
+          )"
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Build and validate sdist
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build --sdist --outdir dist
+          python -m twine check dist/*
+      - name: Upload sdist component
+        uses: actions/upload-artifact@v7
+        with:
+          name: component-sdist
+          path: dist/*.tar.gz
+          if-no-files-found: error
+          retention-days: 30
+
+  wheels:
+    name: Wheels / ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: linux-x86_64
+            os: ubuntu-24.04
+            archs: x86_64
+            experimental: false
+          - label: linux-aarch64
+            os: ubuntu-24.04-arm
+            archs: aarch64
+            experimental: false
+          - label: linux-i686
+            os: ubuntu-24.04
+            archs: i686
+            experimental: false
+          - label: windows-x64-x86
+            os: windows-2025
+            archs: "AMD64 x86"
+            experimental: false
+          - label: macos-intel
+            os: macos-15-intel
+            archs: x86_64
+            experimental: false
+          - label: macos-arm64
+            os: macos-15
+            archs: arm64
+            experimental: false
+          - label: macos-universal2
+            os: macos-15
+            archs: universal2
+            experimental: false
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.experimental }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - name: Install cibuildwheel
+        shell: bash
+        run: python -m pip install "cibuildwheel==${CIBUILDWHEEL_VERSION}"
+      - name: Build and test wheels
+        env:
+          CIBW_ARCHS: ${{ matrix.archs }}
+        shell: bash
+        run: |
+          if [[ "${{ matrix.label }}" == "linux-i686" ]]; then
+            export CIBW_MANYLINUX_I686_IMAGE=manylinux2014
+          fi
+          python -m cibuildwheel --output-dir wheelhouse
+      - name: Upload stable wheel component
+        if: ${{ !matrix.experimental }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: component-wheels-${{ matrix.label }}
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload experimental wheel component
+        if: ${{ matrix.experimental }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: component-EXPERIMENTAL-${{ matrix.label }}
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+          retention-days: 14
+
+  windows-arm64-preview:
+    name: Experimental Windows ARM64
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.include_experimental }}
+    runs-on: windows-11-arm
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - name: Install cibuildwheel
+        shell: pwsh
+        run: python -m pip install "cibuildwheel==$env:CIBUILDWHEEL_VERSION"
+      - name: Build Windows ARM64 preview wheels
+        env:
+          CIBW_ARCHS: ARM64
+        run: python -m cibuildwheel --output-dir wheelhouse
+      - uses: actions/upload-artifact@v7
+        with:
+          name: component-EXPERIMENTAL-windows-arm64-preview
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+          retention-days: 14
+
+  linux-emulated-architectures:
+    name: Experimental Linux / ppc64le-s390x-armv7l-riscv64
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.include_experimental }}
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: all
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - name: Install cibuildwheel
+        run: python -m pip install "cibuildwheel==${CIBUILDWHEEL_VERSION}"
+      - name: Build experimental Linux wheels
+        env:
+          CIBW_ARCHS_LINUX: "ppc64le s390x armv7l riscv64"
+          CIBW_BUILD: "cp313-* cp314-*"
+        run: python -m cibuildwheel --output-dir wheelhouse
+      - uses: actions/upload-artifact@v7
+        with:
+          name: component-EXPERIMENTAL-linux-extra-architectures
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+          retention-days: 14
+
+  experimental-portable-platforms:
+    name: Experimental ${{ matrix.label }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.include_experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Android-arm64-x86_64
+            os: ubuntu-24.04
+            platform: android
+            archs: "arm64_v8a x86_64"
+            build: "cp313-* cp314-*"
+          - label: iOS-device-simulators
+            os: macos-15
+            platform: ios
+            archs: "arm64_iphoneos arm64_iphonesimulator x86_64_iphonesimulator"
+            build: "cp313-* cp314-*"
+          - label: Pyodide-WASM
+            os: ubuntu-24.04
+            platform: pyodide
+            archs: wasm32
+            build: "cp313-* cp314-*"
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - name: Install cibuildwheel
+        shell: bash
+        run: python -m pip install "cibuildwheel==${CIBUILDWHEEL_VERSION}"
+      - name: Build experimental platform wheels
+        env:
+          CIBW_BUILD: ${{ matrix.build }}
+          CIBW_ARCHS: ${{ matrix.archs }}
+          # Cross-platform tests are useful when the target runtime is available,
+          # but a build artifact is still valuable if a GitHub-hosted runner cannot execute it.
+          CIBW_TEST_COMMAND: ""
+        run: python -m cibuildwheel --platform "${{ matrix.platform }}" --output-dir wheelhouse
+      - uses: actions/upload-artifact@v7
+        with:
+          name: component-EXPERIMENTAL-${{ matrix.label }}
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+          retention-days: 14
+
+  experimental-cpython315:
+    name: Experimental CPython 3.15 / ${{ matrix.label }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.include_experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { label: linux-x86_64, os: ubuntu-24.04, archs: x86_64 }
+          - { label: linux-aarch64, os: ubuntu-24.04-arm, archs: aarch64 }
+          - { label: windows-x64, os: windows-2025, archs: AMD64 }
+          - { label: macos-intel, os: macos-15-intel, archs: x86_64 }
+          - { label: macos-arm64, os: macos-15, archs: arm64 }
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - name: Install cibuildwheel
+        shell: bash
+        run: python -m pip install "cibuildwheel==${CIBUILDWHEEL_VERSION}"
+      - name: Build CPython 3.15 prerelease wheels
+        env:
+          CIBW_BUILD: "cp315-*"
+          CIBW_ENABLE: "cpython-prerelease"
+          CIBW_ARCHS: ${{ matrix.archs }}
+        run: python -m cibuildwheel --output-dir wheelhouse
+      - uses: actions/upload-artifact@v7
+        with:
+          name: component-EXPERIMENTAL-CP315-${{ matrix.label }}
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+          retention-days: 14
+
+  bundle:
+    name: Assemble one PyPI-ready bundle
+    if: ${{ always() && needs.sdist.result == 'success' && needs.wheels.result == 'success' }}
+    needs: [sdist, wheels, windows-arm64-preview, linux-emulated-architectures, experimental-portable-platforms, experimental-cpython315]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - name: Download every component artifact from this run
+        uses: actions/download-artifact@v8
+        with:
+          path: collected
+          pattern: component-*
+          merge-multiple: false
+      - name: Assemble and validate release directory
+        env:
+          GIT_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+          PACKAGE_VERSION: ${{ needs.sdist.outputs.version }}
+        run: |
+          set -euo pipefail
+          python tools/assemble_release_bundle.py \
+            --collected collected \
+            --output-parent . \
+            --project-root . \
+            --git-sha "$GIT_SHA" \
+            --run-id "$RUN_ID"
+          python tools/validate_release_bundle.py "YoungLion-${PACKAGE_VERSION}-release-bundle"
+          python -m pip install --upgrade twine
+          python -m twine check "YoungLion-${PACKAGE_VERSION}-release-bundle"/pypi/*
+      - name: Upload the single release bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: YoungLion-${{ needs.sdist.outputs.version }}-release-bundle
+          path: YoungLion-${{ needs.sdist.outputs.version }}-release-bundle/
+          if-no-files-found: error
+          retention-days: 30

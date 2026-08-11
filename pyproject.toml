@@ -1,0 +1,83 @@
+[build-system]
+requires = ["setuptools>=77.0.3", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "YoungLion"
+version = "0.1.0"
+authors = [{ name = "Cavanşir Qurbanzadə", email = "cavanshirpro@gmail.com" }]
+maintainers = [{ name = "Cavanşir Qurbanzadə", email = "cavanshirpro@gmail.com" }]
+description = "Dependency-free native C++ accelerated Python toolkit for dynamic data models, fast file operations, ranked/fuzzy search and developer utilities."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = [
+  "YoungLion", "DDM", "dynamic-data-model", "C++", "native-extension",
+  "filesystem", "file-operations", "search", "BM25", "fuzzy-search",
+  "levenshtein", "jaro-winkler", "autocomplete", "utilities", "zero-dependency"
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX",
+  "Operating System :: POSIX :: Linux",
+  "Operating System :: MacOS",
+  "Programming Language :: C++",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Topic :: Software Development :: Libraries",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Topic :: System :: Filesystems",
+  "Topic :: Text Processing :: Indexing",
+  "Topic :: Utilities",
+  "Typing :: Typed",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "build>=1.2", "twine>=6"]
+
+[project.urls]
+Homepage = "https://github.com/Cavanshirpro/YoungLionPythonLibrary"
+Repository = "https://github.com/Cavanshirpro/YoungLionPythonLibrary.git"
+Documentation = "https://github.com/Cavanshirpro/YoungLionPythonLibrary/tree/main/docs"
+Changelog = "https://github.com/Cavanshirpro/YoungLionPythonLibrary/blob/main/Releases.md"
+Issues = "https://github.com/Cavanshirpro/YoungLionPythonLibrary/issues"
+"Source Code" = "https://github.com/Cavanshirpro/YoungLionPythonLibrary"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+zip-safe = false
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+YoungLion = ["py.typed", "*.pyi", "DataModel/*.pyi", "function/*.pyi", "static/*"]
+
+[tool.setuptools.exclude-package-data]
+# Native source is required in the sdist but not in prebuilt wheels.
+YoungLion = ["*.cpp", "*.inc"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+addopts = "-q"
+
+[tool.cibuildwheel]
+build = [
+  "cp310-*", "cp311-*", "cp312-*", "cp313-*", "cp314-*"
+]
+skip = []
+test-command = "python -c \"from YoungLion import DDM, File; from YoungLion.search import SearchIndex; assert DDM({'x': 1}).to_dict()['x'] == 1; assert SearchIndex(['native search']).search('native'); assert File is not None\""
+test-skip = ["*-win_arm64"]
+build-verbosity = 1
