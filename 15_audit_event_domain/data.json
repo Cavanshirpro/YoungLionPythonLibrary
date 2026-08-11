@@ -1,0 +1,41 @@
+[
+  {
+    "id": 1,
+    "event_type": "login",
+    "severity": 1,
+    "resource": "auth",
+    "success": true,
+    "actor": {
+      "id": 10,
+      "name": "alice",
+      "ip": "10.0.0.2",
+      "country": "US"
+    }
+  },
+  {
+    "id": 2,
+    "event_type": "permission_change",
+    "severity": 4,
+    "resource": "admin",
+    "success": true,
+    "actor": {
+      "id": 11,
+      "name": "cavan",
+      "ip": "10.0.0.3",
+      "country": "AZ"
+    }
+  },
+  {
+    "id": 3,
+    "event_type": "login",
+    "severity": 5,
+    "resource": "auth",
+    "success": false,
+    "actor": {
+      "id": 99,
+      "name": "unknown",
+      "ip": "203.0.113.8",
+      "country": "Unknown"
+    }
+  }
+]

@@ -1,0 +1,38 @@
+[
+  {
+    "id": 1,
+    "name": "Astra",
+    "level": 30,
+    "xp": 8800,
+    "team": "lion",
+    "stats": {
+      "wins": 90,
+      "losses": 20,
+      "damage": 150000
+    }
+  },
+  {
+    "id": 2,
+    "name": "Nova",
+    "level": 12,
+    "xp": 2100,
+    "team": "wolf",
+    "stats": {
+      "wins": 20,
+      "losses": 18,
+      "damage": 23000
+    }
+  },
+  {
+    "id": 3,
+    "name": "Cavan",
+    "level": 28,
+    "xp": 7600,
+    "team": "lion",
+    "stats": {
+      "wins": 72,
+      "losses": 12,
+      "damage": 110000
+    }
+  }
+]

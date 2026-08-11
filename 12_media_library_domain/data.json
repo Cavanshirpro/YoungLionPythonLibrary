@@ -1,0 +1,41 @@
+[
+  {
+    "id": 1,
+    "title": "Launch Demo",
+    "kind": "video",
+    "favorite": true,
+    "rating": 5,
+    "media": {
+      "codec": "h264",
+      "width": 1920,
+      "height": 1080,
+      "duration": 122.5
+    }
+  },
+  {
+    "id": 2,
+    "title": "Podcast",
+    "kind": "audio",
+    "favorite": false,
+    "rating": 4,
+    "media": {
+      "codec": "aac",
+      "width": 0,
+      "height": 0,
+      "duration": 1800
+    }
+  },
+  {
+    "id": 3,
+    "title": "Trailer",
+    "kind": "video",
+    "favorite": false,
+    "rating": 4,
+    "media": {
+      "codec": "av1",
+      "width": 3840,
+      "height": 2160,
+      "duration": 90
+    }
+  }
+]

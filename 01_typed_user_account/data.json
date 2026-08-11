@@ -1,0 +1,35 @@
+[
+  {
+    "id": 1,
+    "username": "alice",
+    "role": "admin",
+    "active": true,
+    "profile": {
+      "display_name": "Alice Green",
+      "country": "US",
+      "age": 29
+    }
+  },
+  {
+    "id": 2,
+    "username": "cavan",
+    "role": "member",
+    "active": true,
+    "profile": {
+      "display_name": "Cavan",
+      "country": "AZ",
+      "age": 18
+    }
+  },
+  {
+    "id": 3,
+    "username": "bob",
+    "role": "member",
+    "active": false,
+    "profile": {
+      "display_name": "Bob Stone",
+      "country": "GB",
+      "age": 34
+    }
+  }
+]

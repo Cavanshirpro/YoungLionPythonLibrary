@@ -1,0 +1,35 @@
+[
+  {
+    "id": 1,
+    "name": "Alice",
+    "active": true,
+    "credits": 84,
+    "academic": {
+      "program": "CS",
+      "year": 3,
+      "gpa": 3.8
+    }
+  },
+  {
+    "id": 2,
+    "name": "Cavan",
+    "active": true,
+    "credits": 32,
+    "academic": {
+      "program": "SE",
+      "year": 1,
+      "gpa": 3.9
+    }
+  },
+  {
+    "id": 3,
+    "name": "Bob",
+    "active": false,
+    "credits": 120,
+    "academic": {
+      "program": "CS",
+      "year": 4,
+      "gpa": 2.7
+    }
+  }
+]

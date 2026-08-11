@@ -1,0 +1,26 @@
+[
+  {
+    "id": 1,
+    "email": "a@example.test",
+    "status": "active",
+    "verified": true,
+    "new_server_field": "kept",
+    "meta": {
+      "request_id": "r1",
+      "page": 1,
+      "cached": false
+    }
+  },
+  {
+    "id": 2,
+    "email": "b@example.test",
+    "status": "pending",
+    "verified": false,
+    "new_server_field": "also-kept",
+    "meta": {
+      "request_id": "r2",
+      "page": 1,
+      "cached": true
+    }
+  }
+]

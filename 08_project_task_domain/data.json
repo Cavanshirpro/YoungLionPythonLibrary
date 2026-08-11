@@ -1,0 +1,38 @@
+[
+  {
+    "id": 1,
+    "title": "Native build",
+    "priority": 5,
+    "progress": 0.8,
+    "done": false,
+    "assignment": {
+      "owner": "cavan",
+      "team": "core",
+      "blocked": false
+    }
+  },
+  {
+    "id": 2,
+    "title": "Docs",
+    "priority": 3,
+    "progress": 0.6,
+    "done": false,
+    "assignment": {
+      "owner": "alice",
+      "team": "docs",
+      "blocked": false
+    }
+  },
+  {
+    "id": 3,
+    "title": "Legacy cleanup",
+    "priority": 4,
+    "progress": 1.0,
+    "done": true,
+    "assignment": {
+      "owner": "cavan",
+      "team": "core",
+      "blocked": false
+    }
+  }
+]

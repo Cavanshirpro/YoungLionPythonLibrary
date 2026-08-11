@@ -1,0 +1,38 @@
+[
+  {
+    "id": 1,
+    "plan": "pro",
+    "monthly_price": 19.99,
+    "renewal_day": 12,
+    "active": true,
+    "billing": {
+      "method": "card",
+      "country": "AZ",
+      "auto_renew": true
+    }
+  },
+  {
+    "id": 2,
+    "plan": "team",
+    "monthly_price": 49.99,
+    "renewal_day": 12,
+    "active": true,
+    "billing": {
+      "method": "invoice",
+      "country": "DE",
+      "auto_renew": false
+    }
+  },
+  {
+    "id": 3,
+    "plan": "free",
+    "monthly_price": 0,
+    "renewal_day": 1,
+    "active": false,
+    "billing": {
+      "method": "none",
+      "country": "US",
+      "auto_renew": false
+    }
+  }
+]

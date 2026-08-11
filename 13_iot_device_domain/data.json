@@ -1,0 +1,38 @@
+[
+  {
+    "id": 1,
+    "name": "sensor-a",
+    "site": "lab",
+    "online": true,
+    "firmware": "1.2.0",
+    "telemetry": {
+      "temperature": 22.4,
+      "voltage": 3.29,
+      "signal": 88
+    }
+  },
+  {
+    "id": 2,
+    "name": "sensor-b",
+    "site": "lab",
+    "online": true,
+    "firmware": "1.1.8",
+    "telemetry": {
+      "temperature": 31.2,
+      "voltage": 3.05,
+      "signal": 61
+    }
+  },
+  {
+    "id": 3,
+    "name": "sensor-c",
+    "site": "field",
+    "online": false,
+    "firmware": "1.2.0",
+    "telemetry": {
+      "temperature": 18.7,
+      "voltage": 2.91,
+      "signal": 20
+    }
+  }
+]

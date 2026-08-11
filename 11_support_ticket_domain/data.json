@@ -1,0 +1,41 @@
+[
+  {
+    "id": 1,
+    "subject": "Billing failed",
+    "status": "open",
+    "priority": 5,
+    "assigned": false,
+    "requester": {
+      "id": 10,
+      "name": "Alice",
+      "tier": "pro",
+      "country": "US"
+    }
+  },
+  {
+    "id": 2,
+    "subject": "Cannot login",
+    "status": "open",
+    "priority": 4,
+    "assigned": true,
+    "requester": {
+      "id": 11,
+      "name": "Cavan",
+      "tier": "team",
+      "country": "AZ"
+    }
+  },
+  {
+    "id": 3,
+    "subject": "Feature idea",
+    "status": "closed",
+    "priority": 1,
+    "assigned": true,
+    "requester": {
+      "id": 12,
+      "name": "Bob",
+      "tier": "free",
+      "country": "GB"
+    }
+  }
+]

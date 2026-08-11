@@ -1,0 +1,38 @@
+[
+  {
+    "id": 10,
+    "name": "Lion",
+    "level": 25,
+    "balance": 1200,
+    "online": true,
+    "moderation": {
+      "warnings": 0,
+      "muted": false,
+      "reason": ""
+    }
+  },
+  {
+    "id": 11,
+    "name": "Fox",
+    "level": 8,
+    "balance": 140,
+    "online": false,
+    "moderation": {
+      "warnings": 2,
+      "muted": false,
+      "reason": "spam"
+    }
+  },
+  {
+    "id": 12,
+    "name": "Wolf",
+    "level": 17,
+    "balance": 530,
+    "online": true,
+    "moderation": {
+      "warnings": 3,
+      "muted": true,
+      "reason": "abuse"
+    }
+  }
+]

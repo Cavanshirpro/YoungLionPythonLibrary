@@ -1,0 +1,24 @@
+[
+  {
+    "id": 1,
+    "name": "Default",
+    "active": true,
+    "autosave_seconds": 30,
+    "ui": {
+      "theme": "dark",
+      "scale": 1.0,
+      "language": "en"
+    }
+  },
+  {
+    "id": 2,
+    "name": "Presentation",
+    "active": false,
+    "autosave_seconds": 120,
+    "ui": {
+      "theme": "light",
+      "scale": 1.3,
+      "language": "en"
+    }
+  }
+]

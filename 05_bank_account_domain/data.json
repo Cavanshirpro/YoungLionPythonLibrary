@@ -1,0 +1,35 @@
+[
+  {
+    "id": 501,
+    "currency": "USD",
+    "balance": 5000,
+    "locked": false,
+    "owner": {
+      "name": "Alice",
+      "country": "US",
+      "verified": true
+    }
+  },
+  {
+    "id": 502,
+    "currency": "AZN",
+    "balance": 1500,
+    "locked": false,
+    "owner": {
+      "name": "Cavan",
+      "country": "AZ",
+      "verified": true
+    }
+  },
+  {
+    "id": 503,
+    "currency": "EUR",
+    "balance": 80,
+    "locked": true,
+    "owner": {
+      "name": "Bob",
+      "country": "DE",
+      "verified": false
+    }
+  }
+]

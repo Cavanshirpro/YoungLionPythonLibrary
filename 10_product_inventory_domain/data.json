@@ -1,0 +1,38 @@
+[
+  {
+    "id": 1,
+    "sku": "LAP-001",
+    "name": "Laptop",
+    "price": 1299,
+    "stock": 4,
+    "supplier": {
+      "id": 10,
+      "name": "TechCo",
+      "country": "US"
+    }
+  },
+  {
+    "id": 2,
+    "sku": "MOU-010",
+    "name": "Mouse",
+    "price": 49,
+    "stock": 30,
+    "supplier": {
+      "id": 11,
+      "name": "InputLab",
+      "country": "DE"
+    }
+  },
+  {
+    "id": 3,
+    "sku": "KEY-200",
+    "name": "Keyboard",
+    "price": 99,
+    "stock": 0,
+    "supplier": {
+      "id": 11,
+      "name": "InputLab",
+      "country": "DE"
+    }
+  }
+]

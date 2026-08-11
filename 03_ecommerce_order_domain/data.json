@@ -1,0 +1,38 @@
+[
+  {
+    "id": 100,
+    "status": "processing",
+    "subtotal": 250,
+    "shipping_cost": 12,
+    "paid": true,
+    "shipping": {
+      "country": "AZ",
+      "city": "Baku",
+      "method": "express"
+    }
+  },
+  {
+    "id": 101,
+    "status": "pending",
+    "subtotal": 80,
+    "shipping_cost": 5,
+    "paid": false,
+    "shipping": {
+      "country": "TR",
+      "city": "Istanbul",
+      "method": "standard"
+    }
+  },
+  {
+    "id": 102,
+    "status": "processing",
+    "subtotal": 430,
+    "shipping_cost": 0,
+    "paid": true,
+    "shipping": {
+      "country": "AZ",
+      "city": "Ganja",
+      "method": "standard"
+    }
+  }
+]
