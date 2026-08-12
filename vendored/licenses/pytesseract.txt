@@ -1,3 +1,0 @@
-﻿Package: pytesseract
-License: Apache License 2.0
-

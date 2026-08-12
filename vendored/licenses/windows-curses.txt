@@ -1,3 +1,0 @@
-﻿Package: windows-curses
-License: PSF2
-

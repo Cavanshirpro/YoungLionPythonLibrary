@@ -1,3 +1,0 @@
-﻿Package: moviepy
-License: MIT License
-

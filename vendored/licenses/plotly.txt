@@ -1,3 +1,0 @@
-﻿Package: plotly
-License: MIT
-

@@ -1,3 +1,0 @@
-﻿Package: paramiko
-License: LGPL
-

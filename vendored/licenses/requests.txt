@@ -1,3 +1,0 @@
-﻿Package: requests
-License: Apache-2.0
-

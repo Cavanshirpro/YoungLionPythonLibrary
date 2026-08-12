@@ -1,3 +1,0 @@
-﻿Package: tqdm
-License: MPL-2.0 AND MIT
-
