@@ -311,7 +311,7 @@ The main branch intentionally stays focused on the library itself. A separate **
 - File/configuration/ETL workflows;
 - integrated scheduler/cache/logger/resilience examples.
 
-After the branch is pushed, browse it at [`examples` branch](https://github.com/Cavanshirpro/YoungLionPythonLibrary/tree/examples).
+After the branch is pushed, browse it at [`tree/examples`](../../tree/examples).
 
 # File workflows
 

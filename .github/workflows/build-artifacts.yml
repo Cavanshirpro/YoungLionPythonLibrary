@@ -52,13 +52,31 @@ jobs:
             echo "Tag ${GITHUB_REF_NAME} does not match project version v${VERSION}." >&2
             exit 1
           fi
-      - name: Reject legacy automatic release workflow
+      - name: Verify legacy release workflow is disabled
         shell: bash
         run: |
-          if [[ -f .github/workflows/younglion-ci.yml ]]; then
-            echo "Legacy younglion-ci.yml is still present and contains old release logic." >&2
-            exit 1
-          fi
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/younglion-ci.yml')
+          if not path.exists():
+              raise SystemExit(0)
+
+          text = path.read_text(encoding='utf-8')
+          forbidden = (
+              'softprops/action-gh-release',
+              'git push origin v0.0.9.8',
+              'git tag -a v0.0.9.8',
+              'Release v0.0.9.8',
+          )
+          found = [marker for marker in forbidden if marker in text]
+          if found:
+              raise SystemExit(
+                  'Legacy automatic release logic is still active: ' + ', '.join(found)
+              )
+          print('Legacy workflow path is absent or safely disabled.')
+          PY
       - name: Strict native build and tests
         env:
           YOUNGLION_STRICT: "1"
@@ -104,6 +122,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # v0.1 official wheels: platforms already covered by the green
+          # Native C++ CI matrix. Less-proven architectures remain experimental.
           - label: linux-x86_64
             os: ubuntu-24.04
             archs: x86_64
@@ -112,13 +132,9 @@ jobs:
             os: ubuntu-24.04-arm
             archs: aarch64
             experimental: false
-          - label: linux-i686
-            os: ubuntu-24.04
-            archs: i686
-            experimental: false
-          - label: windows-x64-x86
+          - label: windows-x64
             os: windows-2025
-            archs: "AMD64 x86"
+            archs: AMD64
             experimental: false
           - label: macos-intel
             os: macos-15-intel
@@ -127,10 +143,6 @@ jobs:
           - label: macos-arm64
             os: macos-15
             archs: arm64
-            experimental: false
-          - label: macos-universal2
-            os: macos-15
-            archs: universal2
             experimental: false
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.experimental }}
@@ -149,9 +161,6 @@ jobs:
           CIBW_ARCHS: ${{ matrix.archs }}
         shell: bash
         run: |
-          if [[ "${{ matrix.label }}" == "linux-i686" ]]; then
-            export CIBW_MANYLINUX_I686_IMAGE=manylinux2014
-          fi
           python -m cibuildwheel --output-dir wheelhouse
       - name: Upload stable wheel component
         if: ${{ !matrix.experimental }}
@@ -164,6 +173,45 @@ jobs:
       - name: Upload experimental wheel component
         if: ${{ matrix.experimental }}
         uses: actions/upload-artifact@v7
+        with:
+          name: component-EXPERIMENTAL-${{ matrix.label }}
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+          retention-days: 14
+
+  experimental-extra-wheels:
+    needs: preflight
+    name: Experimental compatibility wheel / ${{ matrix.label }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.include_experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { label: linux-i686, os: ubuntu-24.04, archs: i686 }
+          - { label: windows-x86, os: windows-2025, archs: x86 }
+          - { label: macos-universal2, os: macos-15, archs: universal2 }
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - name: Install cibuildwheel
+        shell: bash
+        run: python -m pip install "cibuildwheel==${CIBUILDWHEEL_VERSION}"
+      - name: Build experimental compatibility wheels
+        env:
+          CIBW_ARCHS: ${{ matrix.archs }}
+        shell: bash
+        run: |
+          if [[ "${{ matrix.label }}" == "linux-i686" ]]; then
+            export CIBW_MANYLINUX_I686_IMAGE=manylinux2014
+          fi
+          python -m cibuildwheel --output-dir wheelhouse
+      - uses: actions/upload-artifact@v7
         with:
           name: component-EXPERIMENTAL-${{ matrix.label }}
           path: wheelhouse/*.whl
@@ -318,7 +366,7 @@ jobs:
   bundle:
     name: Assemble one PyPI-ready bundle
     if: ${{ always() && needs.sdist.result == 'success' && needs.wheels.result == 'success' }}
-    needs: [preflight, sdist, wheels, windows-arm64-preview, linux-emulated-architectures, experimental-portable-platforms, experimental-cpython315]
+    needs: [preflight, sdist, wheels, experimental-extra-wheels, windows-arm64-preview, linux-emulated-architectures, experimental-portable-platforms, experimental-cpython315]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
