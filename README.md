@@ -1,4 +1,4 @@
-# YoungLion 0.1.0
+# YoungLion 0.1.1
 
 **YoungLion** is a dependency-light Python toolkit backed by a C++17 native extension. Version 0.1 focuses on four practical problems that appear repeatedly in desktop applications, bots, developer tools, local services, automation programs, and data-heavy Python applications:
 
@@ -9,7 +9,7 @@
 
 The package keeps a Python-friendly API while moving performance-sensitive traversal, serialization, searching, file primitives, and batch operations into C++ where that provides a real benefit.
 
-> **Development status:** `0.1.0` is still the active v0.1 development line. The repository is prepared for reproducible source/wheel builds, but this README does not imply that a particular commit has already been published to PyPI.
+> **Development status:** `0.1.1` is still the active v0.1 development line. The repository is prepared for reproducible source/wheel builds, but this README does not imply that a particular commit has already been published to PyPI.
 
 ---
 
@@ -470,9 +470,9 @@ The repository workflow is designed to **build, test, and collect artifacts only
 A release build ultimately assembles one downloadable artifact:
 
 ```text
-YoungLion-0.1.0-release-bundle/
+YoungLion-0.1.1-release-bundle/
 ├── pypi/
-│   ├── younglion-0.1.0.tar.gz
+│   ├── younglion-0.1.1.tar.gz
 │   └── *.whl
 ├── experimental/
 ├── checksums/

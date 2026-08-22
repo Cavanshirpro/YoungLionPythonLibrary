@@ -1,10 +1,21 @@
-"""YoungLion dependency-free, native-accelerated search toolkit.
+"""YoungLion.search — ranked, fuzzy, autocomplete, structured and DDM-aware search.
 
-The public API covers exact, prefix, substring, regular-expression, fuzzy,
-full-text BM25, autocomplete, multi-pattern, structured-record, numeric and
-filesystem search. Expensive string-distance primitives are implemented by the
-C++ extension; reusable corpora use an inverted index so repeated searches do
-not rescan every token in every document.
+This module provides a layered, dependency-free search toolkit.  Low-level native
+similarity primitives feed reusable inverted/BM25 indexes; higher-level engines
+cover autocomplete, multi-pattern matching, numeric ranges, structured records,
+filesystem content and application search.  DDMSearchEngine adds reusable indexes
+for dotted paths such as ``profile.name`` or ``economy.balance`` across ordinary
+DDM-compatible iterables and YoungLion collection types.
+
+The design separates one-time indexing cost from repeated query throughput.
+Exact indexed lookups use hash structures; range operations use sorted index data;
+ranked text search uses persistent posting lists/BM25; fuzzy matching is available
+when exact terms are insufficient.  Mutating a source outside a collection-managed
+path may require ``refresh()`` or ``invalidate()`` before querying again.
+
+Compatibility classes GenerateTags, SearchData, Search and SearchFile remain
+available for older call sites, while ApplicationSearch and DDMSearchEngine are
+recommended for new application backends.
 """
 from __future__ import annotations
 
@@ -29,17 +40,40 @@ def _norm(text: Any, case_sensitive: bool = False) -> str:
 
 
 def tokenize(text: Any, *, case_sensitive: bool = False, min_length: int = 1) -> List[str]:
-    """Tokenize text without external dependencies.
-
-    The tokenizer is intentionally conservative and Unicode-aware. Callers with
-    domain-specific tokenization requirements can pre-build ``SearchDocument``
-    fields/tags or use ``InvertedIndex`` directly with their own tokens.
+    """Normalize text into the token sequence used by YoungLion search indexes.
+    
+    Parameters
+    ----------
+    text : Any
+        Text/content input.
+    case_sensitive : bool (default: ``False``)
+        Whether string matching preserves case instead of using case-folded comparison.
+    min_length : int (default: ``1``)
+        Minimum token length retained by tokenization.
+    
+    Returns
+    -------
+    ``List[str]`` result described by the method semantics.
     """
     value = str(text) if case_sensitive else str(text).casefold()
     return [m.group(0) for m in _WORD_RE.finditer(value) if len(m.group(0)) >= min_length]
 
 
 class SearchAlgorithm(str, Enum):
+    """Search algorithm names.
+    
+    Overview
+    --------
+    ``SearchAlgorithm`` provides stable symbolic constants/enum-like values used to choose matching strategies.  It is part of YoungLion's public, dependency-free Python API and is designed to remain directly discoverable through ``help()``, IDLE and IDE hover/introspection tools.
+    
+    When to use it
+    --------------
+    Use through SearchQuery/SearchIndex options rather than hard-coding implementation details.
+    
+    Inheritance
+    -----------
+    Base class(es): ``str, Enum``.
+    """
     AUTO = "auto"
     HYBRID = "hybrid"
     EXACT = "exact"
@@ -55,6 +89,24 @@ class SearchAlgorithm(str, Enum):
 
 @dataclass(slots=True)
 class SearchDocument:
+    """Indexed search document.
+    
+    Overview
+    --------
+    ``SearchDocument`` provides document identity, source value, normalized text/tokens, tags, metadata and searchable-text composition.  It is part of YoungLion's public, dependency-free Python API and is designed to remain directly discoverable through ``help()``, IDLE and IDE hover/introspection tools.
+    
+    When to use it
+    --------------
+    Used internally and available for inspection/custom integrations.
+    
+    Inheritance
+    -----------
+    Base class(es): ``object``.
+    
+    Primary public operations
+    -------------------------
+    searchable_text.
+    """
     id: Hashable
     text: str
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -62,6 +114,16 @@ class SearchDocument:
     fields: Dict[str, Any] = field(default_factory=dict)
 
     def searchable_text(self) -> str:
+        """Return the document fields combined into the text used for indexing/search.
+        
+        Details
+        -------
+        This method belongs to :class:`SearchDocument` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Returns
+        -------
+        ``str`` result described by the method semantics.
+        """
         extras = [*self.tags]
         extras.extend(str(v) for v in self.fields.values() if v is not None)
         return " ".join([self.text, *extras]) if extras else self.text
@@ -69,6 +131,24 @@ class SearchDocument:
 
 @dataclass(slots=True, order=True)
 class SearchResult:
+    """Ranked search result.
+    
+    Overview
+    --------
+    ``SearchResult`` provides document reference, score and matching metadata with convenient source-value access.  It is part of YoungLion's public, dependency-free Python API and is designed to remain directly discoverable through ``help()``, IDLE and IDE hover/introspection tools.
+    
+    When to use it
+    --------------
+    Returned by result-oriented search APIs.
+    
+    Inheritance
+    -----------
+    Base class(es): ``object``.
+    
+    Primary public operations
+    -------------------------
+    value.
+    """
     sort_index: float = field(init=False, repr=False)
     score: float
     document: SearchDocument = field(compare=False)
@@ -83,11 +163,35 @@ class SearchResult:
 
     @property
     def value(self) -> Any:
+        """Return the original application value associated with this search result.
+        
+        Details
+        -------
+        This method belongs to :class:`SearchResult` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Returns
+        -------
+        ``Any`` result described by the method semantics.
+        """
         return self.document.metadata.get("return", self.document)
 
 
 @dataclass(slots=True)
 class SearchStats:
+    """Search index statistics.
+    
+    Overview
+    --------
+    ``SearchStats`` provides document/token/term counts describing an index snapshot.  It is part of YoungLion's public, dependency-free Python API and is designed to remain directly discoverable through ``help()``, IDLE and IDE hover/introspection tools.
+    
+    When to use it
+    --------------
+    Useful for diagnostics and monitoring.
+    
+    Inheritance
+    -----------
+    Base class(es): ``object``.
+    """
     documents: int
     tokens: int
     unique_tokens: int
@@ -96,6 +200,20 @@ class SearchStats:
 
 @dataclass(slots=True)
 class SearchQuery:
+    """Normalized search request.
+    
+    Overview
+    --------
+    ``SearchQuery`` provides query text plus algorithm, limits, scores, filters and regex flags.  It is part of YoungLion's public, dependency-free Python API and is designed to remain directly discoverable through ``help()``, IDLE and IDE hover/introspection tools.
+    
+    When to use it
+    --------------
+    Useful when constructing explicit repeatable search requests.
+    
+    Inheritance
+    -----------
+    Base class(es): ``object``.
+    """
     text: str
     algorithm: Union[SearchAlgorithm, str] = SearchAlgorithm.HYBRID
     limit: Optional[int] = 10
@@ -106,12 +224,40 @@ class SearchQuery:
 
 @dataclass(slots=True, frozen=True)
 class Posting:
+    """Inverted-index posting.
+    
+    Overview
+    --------
+    ``Posting`` provides document ID and term-frequency information.  It is part of YoungLion's public, dependency-free Python API and is designed to remain directly discoverable through ``help()``, IDLE and IDE hover/introspection tools.
+    
+    When to use it
+    --------------
+    Primarily useful for index inspection.
+    
+    Inheritance
+    -----------
+    Base class(es): ``object``.
+    """
     doc_id: Hashable
     term_frequency: int
 
 
 @dataclass(slots=True)
 class AutocompleteEntry:
+    """Autocomplete candidate.
+    
+    Overview
+    --------
+    ``AutocompleteEntry`` provides display text, payload and ranking weight.  It is part of YoungLion's public, dependency-free Python API and is designed to remain directly discoverable through ``help()``, IDLE and IDE hover/introspection tools.
+    
+    When to use it
+    --------------
+    Stored by AutocompleteIndex.
+    
+    Inheritance
+    -----------
+    Base class(es): ``object``.
+    """
     term: str
     payload: Any = None
     weight: float = 1.0
@@ -119,6 +265,20 @@ class AutocompleteEntry:
 
 @dataclass(slots=True, frozen=True)
 class PatternMatch:
+    """Multi-pattern match record.
+    
+    Overview
+    --------
+    ``PatternMatch`` provides matched pattern and text span metadata.  It is part of YoungLion's public, dependency-free Python API and is designed to remain directly discoverable through ``help()``, IDLE and IDE hover/introspection tools.
+    
+    When to use it
+    --------------
+    Returned by MultiPatternSearch.find.
+    
+    Inheritance
+    -----------
+    Base class(es): ``object``.
+    """
     pattern: str
     start: int
     end: int
@@ -126,18 +286,94 @@ class PatternMatch:
 
 
 class FuzzyMatcher:
-    """Native Unicode fuzzy metrics and normalized convenience scores."""
+    """Native-accelerated fuzzy string matcher.
+    
+    Overview
+    --------
+    ``FuzzyMatcher`` provides Levenshtein, Damerau, Jaro-Winkler, trigram and hybrid similarity functions.  It is part of YoungLion's public, dependency-free Python API and is designed to remain directly discoverable through ``help()``, IDLE and IDE hover/introspection tools.
+    
+    When to use it
+    --------------
+    Use for typo-tolerant comparison; choose a metric appropriate to string length/error type.
+    
+    Inheritance
+    -----------
+    Base class(es): ``object``.
+    
+    Primary public operations
+    -------------------------
+    levenshtein, damerau_levenshtein, levenshtein_ratio, jaro_winkler, trigram, hybrid.
+    """
 
     @staticmethod
     def levenshtein(a: str, b: str, *, case_sensitive: bool = False) -> int:
+        """Return native Levenshtein edit distance between two strings.
+        
+        Details
+        -------
+        This method belongs to :class:`FuzzyMatcher` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        a : str
+            First string/value.
+        b : str
+            Second string/value.
+        case_sensitive : bool (default: ``False``)
+            Whether string matching preserves case instead of using case-folded comparison.
+        
+        Returns
+        -------
+        ``int`` result described by the method semantics.
+        """
         return int(_native.levenshtein(_norm(a, case_sensitive), _norm(b, case_sensitive)))
 
     @staticmethod
     def damerau_levenshtein(a: str, b: str, *, case_sensitive: bool = False) -> int:
+        """Return native Damerau-Levenshtein distance including adjacent transpositions.
+        
+        Details
+        -------
+        This method belongs to :class:`FuzzyMatcher` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        a : str
+            First string/value.
+        b : str
+            Second string/value.
+        case_sensitive : bool (default: ``False``)
+            Whether string matching preserves case instead of using case-folded comparison.
+        
+        Returns
+        -------
+        ``int`` result described by the method semantics.
+        """
         return int(_native.damerau_levenshtein(_norm(a, case_sensitive), _norm(b, case_sensitive)))
 
     @staticmethod
     def levenshtein_ratio(a: str, b: str, *, damerau: bool = False, case_sensitive: bool = False) -> float:
+        """Return a normalized 0..1 similarity ratio derived from edit distance.
+        
+        Details
+        -------
+        This method belongs to :class:`FuzzyMatcher` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        a : str
+            First string/value.
+        b : str
+            Second string/value.
+        damerau : bool (default: ``False``)
+            Whether the normalized edit ratio uses Damerau-Levenshtein distance.
+        case_sensitive : bool (default: ``False``)
+            Whether string matching preserves case instead of using case-folded comparison.
+        
+        Returns
+        -------
+        ``float`` result described by the method semantics.
+        """
         aa, bb = _norm(a, case_sensitive), _norm(b, case_sensitive)
         denom = max(len(aa), len(bb), 1)
         distance = _native.damerau_levenshtein(aa, bb) if damerau else _native.levenshtein(aa, bb)
@@ -145,14 +381,71 @@ class FuzzyMatcher:
 
     @staticmethod
     def jaro_winkler(a: str, b: str, *, case_sensitive: bool = False) -> float:
+        """Return Jaro-Winkler similarity, useful for short names and prefix-preserving typos.
+        
+        Details
+        -------
+        This method belongs to :class:`FuzzyMatcher` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        a : str
+            First string/value.
+        b : str
+            Second string/value.
+        case_sensitive : bool (default: ``False``)
+            Whether string matching preserves case instead of using case-folded comparison.
+        
+        Returns
+        -------
+        ``float`` result described by the method semantics.
+        """
         return float(_native.jaro_winkler(_norm(a, case_sensitive), _norm(b, case_sensitive)))
 
     @staticmethod
     def trigram(a: str, b: str, *, case_sensitive: bool = False) -> float:
+        """Return trigram Dice-style similarity between two strings.
+        
+        Details
+        -------
+        This method belongs to :class:`FuzzyMatcher` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        a : str
+            First string/value.
+        b : str
+            Second string/value.
+        case_sensitive : bool (default: ``False``)
+            Whether string matching preserves case instead of using case-folded comparison.
+        
+        Returns
+        -------
+        ``float`` result described by the method semantics.
+        """
         return float(_native.trigram_similarity(_norm(a, case_sensitive), _norm(b, case_sensitive)))
 
     @staticmethod
     def hybrid(a: str, b: str, *, case_sensitive: bool = False) -> float:
+        """Combine multiple fuzzy signals into a general-purpose normalized similarity score.
+        
+        Details
+        -------
+        This method belongs to :class:`FuzzyMatcher` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        a : str
+            First string/value.
+        b : str
+            Second string/value.
+        case_sensitive : bool (default: ``False``)
+            Whether string matching preserves case instead of using case-folded comparison.
+        
+        Returns
+        -------
+        ``float`` result described by the method semantics.
+        """
         lev = FuzzyMatcher.levenshtein_ratio(a, b, damerau=True, case_sensitive=case_sensitive)
         jw = FuzzyMatcher.jaro_winkler(a, b, case_sensitive=case_sensitive)
         tri = FuzzyMatcher.trigram(a, b, case_sensitive=case_sensitive)
@@ -160,14 +453,36 @@ class FuzzyMatcher:
 
 
 class InvertedIndex:
-    """Reusable posting-list index for repeated full-text searches.
-
-    BM25 work is proportional to postings touched by query terms rather than to
-    every token in the corpus. This is substantially more scalable than
-    rebuilding corpus term frequencies on every query.
+    """Reusable token inverted index.
+    
+    Overview
+    --------
+    ``InvertedIndex`` provides posting lists, prefix/fuzzy term expansion, candidates and BM25 scoring.  It is part of YoungLion's public, dependency-free Python API and is designed to remain directly discoverable through ``help()``, IDLE and IDE hover/introspection tools.
+    
+    When to use it
+    --------------
+    Usually accessed through SearchIndex; exposed for advanced index inspection.
+    
+    Inheritance
+    -----------
+    Base class(es): ``object``.
+    
+    Primary public operations
+    -------------------------
+    add, remove, clear, tokens, postings, terms, prefix_terms, fuzzy_terms, candidate_ids, bm25, document_count, token_count, unique_token_count.
     """
 
     def __init__(self) -> None:
+        """Initialize a new InvertedIndex instance using the supplied configuration and input data.
+        
+        Details
+        -------
+        This method belongs to :class:`InvertedIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         self._postings: Dict[str, Dict[Hashable, int]] = {}
         self._tokens_by_doc: Dict[Hashable, Tuple[str, ...]] = {}
         self._lengths: Dict[Hashable, int] = {}
@@ -175,6 +490,27 @@ class InvertedIndex:
         self._sorted_terms: Optional[List[str]] = None
 
     def add(self, doc_id: Hashable, tokens: Iterable[str]) -> None:
+        """Add a value/record/operation to the current object according to its collection or numeric semantics.
+        
+        Details
+        -------
+        This method belongs to :class:`InvertedIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        doc_id : Hashable
+            Stable document identifier.
+        tokens : Iterable[str]
+            Number of rate-limit tokens requested.
+        
+        Returns
+        -------
+        Return value documented by the owning API; mutating fluent methods may return ``self``.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         self.remove(doc_id)
         materialized = tuple(tokens)
         self._tokens_by_doc[doc_id] = materialized
@@ -185,6 +521,25 @@ class InvertedIndex:
         self._sorted_terms = None
 
     def remove(self, doc_id: Hashable) -> bool:
+        """Remove an existing record/document/event and raise or report according to the class contract when absent.
+        
+        Details
+        -------
+        This method belongs to :class:`InvertedIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        doc_id : Hashable
+            Stable document identifier.
+        
+        Returns
+        -------
+        ``bool`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         old = self._tokens_by_doc.pop(doc_id, None)
         if old is None:
             return False
@@ -200,6 +555,20 @@ class InvertedIndex:
         return True
 
     def clear(self) -> None:
+        """Remove all currently stored entries or queued operations, depending on the owning class.
+        
+        Details
+        -------
+        This method belongs to :class:`InvertedIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Returns
+        -------
+        Return value documented by the owning API; mutating fluent methods may return ``self``.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         self._postings.clear()
         self._tokens_by_doc.clear()
         self._lengths.clear()
@@ -207,19 +576,87 @@ class InvertedIndex:
         self._sorted_terms = None
 
     def tokens(self, doc_id: Hashable) -> Tuple[str, ...]:
+        """Perform the ``tokens`` operation for InvertedIndex.
+        
+        Details
+        -------
+        This method belongs to :class:`InvertedIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        doc_id : Hashable
+            Stable document identifier.
+        
+        Returns
+        -------
+        ``Tuple[str, ...]`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         return self._tokens_by_doc.get(doc_id, ())
 
     def postings(self, term: str) -> Tuple[Posting, ...]:
+        """Perform the ``postings`` operation for InvertedIndex.
+        
+        Details
+        -------
+        This method belongs to :class:`InvertedIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        term : str
+            Value supplied for ``term`` according to the InvertedIndex contract.
+        
+        Returns
+        -------
+        ``Tuple[Posting, ...]`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         return tuple(Posting(doc_id, tf) for doc_id, tf in self._postings.get(term, {}).items())
 
     def terms(self) -> Iterator[str]:
+        """Perform the ``terms`` operation for InvertedIndex.
+        
+        Details
+        -------
+        This method belongs to :class:`InvertedIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Returns
+        -------
+        ``Iterator[str]`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         return iter(self._postings)
 
     def prefix_terms(self, prefix: str, *, limit: Optional[int] = None) -> List[str]:
-        """Return vocabulary terms with *prefix* using a lazily sorted cache.
-
-        The first prefix lookup after an index mutation sorts the vocabulary;
-        subsequent lookups are O(log V + k) instead of scanning all V terms.
+        """Return indexed terms beginning with a normalized prefix.
+        
+        Details
+        -------
+        This method belongs to :class:`InvertedIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        prefix : str
+            Optional path/text prefix applied by the operation.
+        limit : Optional[int] (default: ``None``)
+            Maximum number of results/messages/suggestions to return.
+        
+        Returns
+        -------
+        ``List[str]`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
         """
         if not prefix:
             return []
@@ -239,6 +676,31 @@ class InvertedIndex:
 
     def fuzzy_terms(self, query: str, *, algorithm: Union[SearchAlgorithm, str] = SearchAlgorithm.HYBRID,
                     threshold: float = 0.60, limit: int = 8) -> List[Tuple[str, float]]:
+        """Return similar indexed terms ranked by the selected fuzzy algorithm and threshold.
+        
+        Details
+        -------
+        This method belongs to :class:`InvertedIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        query : str
+            Search text, structured query or SQL/XML expression according to the method.
+        algorithm : Union[SearchAlgorithm, str] (default: ``SearchAlgorithm.HYBRID``)
+            Algorithm name used for hashing, fuzzy matching or search ranking.
+        threshold : float (default: ``0.6``)
+            Value supplied for ``threshold`` according to the InvertedIndex contract.
+        limit : int (default: ``8``)
+            Maximum number of results/messages/suggestions to return.
+        
+        Returns
+        -------
+        ``List[Tuple[str, float]]`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         algo = SearchAlgorithm(algorithm)
         scored: List[Tuple[float, str]] = []
         for term in self._postings:
@@ -261,6 +723,25 @@ class InvertedIndex:
         return [(term, score) for score, term in scored[:max(0, int(limit))]]
 
     def candidate_ids(self, terms: Iterable[str]) -> set[Hashable]:
+        """Return document IDs referenced by any of the supplied terms.
+        
+        Details
+        -------
+        This method belongs to :class:`InvertedIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        terms : Iterable[str]
+            Search/index terms.
+        
+        Returns
+        -------
+        ``set[Hashable]`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         ids: set[Hashable] = set()
         for term in terms:
             ids.update(self._postings.get(term, ()))
@@ -268,6 +749,31 @@ class InvertedIndex:
 
     def bm25(self, query_tokens: Iterable[str], *, candidates: Optional[set[Hashable]] = None,
              k1: float = 1.5, b: float = 0.75) -> Dict[Hashable, float]:
+        """Calculate BM25 relevance scores for query tokens over candidate documents.
+        
+        Details
+        -------
+        This method belongs to :class:`InvertedIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        query_tokens : Iterable[str]
+            Value supplied for ``query_tokens`` according to the InvertedIndex contract.
+        candidates : Optional[set[Hashable]] (default: ``None``)
+            Value supplied for ``candidates`` according to the InvertedIndex contract.
+        k1 : float (default: ``1.5``)
+            BM25 term-frequency saturation parameter.
+        b : float (default: ``0.75``)
+            Second string/value.
+        
+        Returns
+        -------
+        ``Dict[Hashable, float]`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         query = tuple(dict.fromkeys(query_tokens))
         if not query or not self._lengths:
             return {}
@@ -291,22 +797,98 @@ class InvertedIndex:
 
     @property
     def document_count(self) -> int:
+        """Return the number of documents currently represented by the index.
+        
+        Details
+        -------
+        This method belongs to :class:`InvertedIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Returns
+        -------
+        ``int`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         return len(self._lengths)
 
     @property
     def token_count(self) -> int:
+        """Return the total number of indexed token occurrences.
+        
+        Details
+        -------
+        This method belongs to :class:`InvertedIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Returns
+        -------
+        ``int`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         return self._total_tokens
 
     @property
     def unique_token_count(self) -> int:
+        """Return the number of distinct indexed terms.
+        
+        Details
+        -------
+        This method belongs to :class:`InvertedIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Returns
+        -------
+        ``int`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         return len(self._postings)
 
 
 class SearchIndex:
-    """General-purpose ranked text index with persistent posting lists."""
+    """General-purpose ranked in-memory index.
+    
+    Overview
+    --------
+    ``SearchIndex`` provides document lifecycle, filters and exact/contains/prefix/regex/fuzzy/BM25-oriented search.  It is part of YoungLion's public, dependency-free Python API and is designed to remain directly discoverable through ``help()``, IDLE and IDE hover/introspection tools.
+    
+    When to use it
+    --------------
+    Use for reusable text search where rebuilding per query would be wasteful.
+    
+    Inheritance
+    -----------
+    Base class(es): ``object``.
+    
+    Primary public operations
+    -------------------------
+    add, extend, remove, update, clear, stats, inverted_index, search.
+    """
 
     def __init__(self, documents: Optional[Iterable[Union[SearchDocument, Mapping[str, Any], str]]] = None,
                  *, case_sensitive: bool = False):
+        """Initialize a new SearchIndex instance using the supplied configuration and input data.
+        
+        Details
+        -------
+        This method belongs to :class:`SearchIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        documents : Optional[Iterable[Union[SearchDocument, Mapping[str, Any], str]]] (default: ``None``)
+            Iterable of initial/additional documents.
+        case_sensitive : bool (default: ``False``)
+            Whether string matching preserves case instead of using case-folded comparison.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         self.case_sensitive = bool(case_sensitive)
         self._docs: Dict[Hashable, SearchDocument] = {}
         self._texts: Dict[Hashable, str] = {}
@@ -339,6 +921,27 @@ class SearchIndex:
         raise TypeError("document must be SearchDocument, mapping or str")
 
     def add(self, document: Union[SearchDocument, Mapping[str, Any], str], *, doc_id: Optional[Hashable] = None) -> SearchDocument:
+        """Add a value/record/operation to the current object according to its collection or numeric semantics.
+        
+        Details
+        -------
+        This method belongs to :class:`SearchIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        document : Union[SearchDocument, Mapping[str, Any], str]
+            Document/value to add to the index.
+        doc_id : Optional[Hashable] (default: ``None``)
+            Stable document identifier.
+        
+        Returns
+        -------
+        ``SearchDocument`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         doc = self._coerce(document, doc_id)
         if doc.id in self._docs:
             self._inverted.remove(doc.id)
@@ -351,11 +954,49 @@ class SearchIndex:
         return doc
 
     def extend(self, documents: Iterable[Union[SearchDocument, Mapping[str, Any], str]]) -> "SearchIndex":
+        """Add several documents to the index.
+        
+        Details
+        -------
+        This method belongs to :class:`SearchIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        documents : Iterable[Union[SearchDocument, Mapping[str, Any], str]]
+            Iterable of initial/additional documents.
+        
+        Returns
+        -------
+        ``'SearchIndex'`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         for doc in documents:
             self.add(doc)
         return self
 
     def remove(self, doc_id: Hashable) -> bool:
+        """Remove an existing record/document/event and raise or report according to the class contract when absent.
+        
+        Details
+        -------
+        This method belongs to :class:`SearchIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        doc_id : Hashable
+            Stable document identifier.
+        
+        Returns
+        -------
+        ``bool`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         if doc_id not in self._docs:
             return False
         del self._docs[doc_id]
@@ -364,6 +1005,27 @@ class SearchIndex:
         return True
 
     def update(self, doc_id: Hashable, **changes: Any) -> SearchDocument:
+        """Update top-level fields from mapping arguments and keyword values.
+        
+        Details
+        -------
+        This method belongs to :class:`SearchIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        doc_id : Hashable
+            Stable document identifier.
+        **changes : Any
+            Value supplied for ``changes`` according to the SearchIndex contract.
+        
+        Returns
+        -------
+        ``SearchDocument`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         old = self._docs[doc_id]
         doc = SearchDocument(
             doc_id,
@@ -375,6 +1037,20 @@ class SearchIndex:
         return self.add(doc)
 
     def clear(self) -> None:
+        """Remove all currently stored entries or queued operations, depending on the owning class.
+        
+        Details
+        -------
+        This method belongs to :class:`SearchIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Returns
+        -------
+        Return value documented by the owning API; mutating fluent methods may return ``self``.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         self._docs.clear()
         self._texts.clear()
         self._inverted.clear()
@@ -386,6 +1062,20 @@ class SearchIndex:
         return iter(self._docs.values())
 
     def stats(self) -> SearchStats:
+        """Return diagnostic counts describing the current cache/index/processor state.
+        
+        Details
+        -------
+        This method belongs to :class:`SearchIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Returns
+        -------
+        Dictionary/dataclass containing diagnostic statistics for the current object.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         count = self._inverted.token_count
         return SearchStats(
             len(self),
@@ -396,6 +1086,20 @@ class SearchIndex:
 
     @property
     def inverted_index(self) -> InvertedIndex:
+        """Expose the reusable InvertedIndex backing this SearchIndex.
+        
+        Details
+        -------
+        This method belongs to :class:`SearchIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Returns
+        -------
+        ``InvertedIndex`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         return self._inverted
 
     @staticmethod
@@ -464,6 +1168,35 @@ class SearchIndex:
     def search(self, query: Union[str, SearchQuery], *, algorithm: Union[SearchAlgorithm, str] = SearchAlgorithm.HYBRID,
                limit: Optional[int] = 10, min_score: float = 0.0, filters: Optional[Mapping[str, Any]] = None,
                regex_flags: int = 0) -> List[SearchResult]:
+        """Search the current data/index using the query and options supported by this class.
+        
+        Details
+        -------
+        This method belongs to :class:`SearchIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        query : Union[str, SearchQuery]
+            Search text, structured query or SQL/XML expression according to the method.
+        algorithm : Union[SearchAlgorithm, str] (default: ``SearchAlgorithm.HYBRID``)
+            Algorithm name used for hashing, fuzzy matching or search ranking.
+        limit : Optional[int] (default: ``10``)
+            Maximum number of results/messages/suggestions to return.
+        min_score : float (default: ``0.0``)
+            Minimum normalized/relevance score required for returned results.
+        filters : Optional[Mapping[str, Any]] (default: ``None``)
+            Optional field/metadata filters applied to candidate documents.
+        regex_flags : int (default: ``0``)
+            Flags passed to regular-expression matching.
+        
+        Returns
+        -------
+        ``List[SearchResult]`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         if isinstance(query, SearchQuery):
             spec = query
             query = spec.text
@@ -556,7 +1289,42 @@ class SearchIndex:
 
 
 class BM25Index(SearchIndex):
+    """BM25-focused SearchIndex.
+    
+    Overview
+    --------
+    ``BM25Index`` provides SearchIndex behavior with BM25 as the natural ranked retrieval path.  It is part of YoungLion's public, dependency-free Python API and is designed to remain directly discoverable through ``help()``, IDLE and IDE hover/introspection tools.
+    
+    When to use it
+    --------------
+    Use for document relevance ranking over repeated queries.
+    
+    Inheritance
+    -----------
+    Base class(es): ``SearchIndex``.
+    
+    Primary public operations
+    -------------------------
+    search.
+    """
     def search(self, query: Union[str, SearchQuery], **kwargs: Any) -> List[SearchResult]:
+        """Search the current data/index using the query and options supported by this class.
+        
+        Details
+        -------
+        This method belongs to :class:`BM25Index` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        query : Union[str, SearchQuery]
+            Search text, structured query or SQL/XML expression according to the method.
+        **kwargs : Any
+            Keyword arguments forwarded to the target callable/helper.
+        
+        Returns
+        -------
+        ``List[SearchResult]`` result described by the method semantics.
+        """
         if isinstance(query, SearchQuery):
             query = SearchQuery(query.text, SearchAlgorithm.BM25, query.limit, query.min_score, query.filters, query.regex_flags)
             return super().search(query)
@@ -565,10 +1333,40 @@ class BM25Index(SearchIndex):
 
 
 class AutocompleteIndex:
-    """Weighted autocomplete using sorted-prefix lookup in O(log n + k)."""
+    """Weighted autocomplete index.
+    
+    Overview
+    --------
+    ``AutocompleteIndex`` provides prefix suggestions with optional fuzzy fallback and payloads.  It is part of YoungLion's public, dependency-free Python API and is designed to remain directly discoverable through ``help()``, IDLE and IDE hover/introspection tools.
+    
+    When to use it
+    --------------
+    Use for command palettes, search boxes and route/entity completion.
+    
+    Inheritance
+    -----------
+    Base class(es): ``object``.
+    
+    Primary public operations
+    -------------------------
+    add, suggest.
+    """
 
     def __init__(self, entries: Iterable[Union[str, AutocompleteEntry, Tuple[str, Any], Tuple[str, Any, float]]] = (),
                  *, case_sensitive: bool = False):
+        """Initialize a new AutocompleteIndex instance using the supplied configuration and input data.
+        
+        Details
+        -------
+        This method belongs to :class:`AutocompleteIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        entries : Iterable[Union[str, AutocompleteEntry, Tuple[str, Any], Tuple[str, Any, float]]] (default: ``()``)
+            Initial autocomplete/index entries.
+        case_sensitive : bool (default: ``False``)
+            Whether string matching preserves case instead of using case-folded comparison.
+        """
         self.case_sensitive = bool(case_sensitive)
         self._entries: List[AutocompleteEntry] = []
         self._keys: List[str] = []
@@ -578,6 +1376,25 @@ class AutocompleteIndex:
 
     def add(self, entry: Union[str, AutocompleteEntry, Tuple[str, Any], Tuple[str, Any, float]], payload: Any = None,
             weight: float = 1.0) -> AutocompleteEntry:
+        """Add a value/record/operation to the current object according to its collection or numeric semantics.
+        
+        Details
+        -------
+        This method belongs to :class:`AutocompleteIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        entry : Union[str, AutocompleteEntry, Tuple[str, Any], Tuple[str, Any, float]]
+            Structured or textual log entry to persist.
+        payload : Any (default: ``None``)
+            Application value associated with an indexed entry/document.
+        weight : float (default: ``1.0``)
+            Ranking weight applied to an autocomplete entry.
+        
+        Returns
+        -------
+        ``AutocompleteEntry`` result described by the method semantics.
+        """
         if isinstance(entry, AutocompleteEntry):
             obj = entry
         elif isinstance(entry, str):
@@ -602,6 +1419,27 @@ class AutocompleteIndex:
         self._dirty = False
 
     def suggest(self, prefix: str, *, limit: int = 10, fuzzy_fallback: bool = True, min_score: float = 0.62) -> List[AutocompleteEntry]:
+        """Return ranked autocomplete candidates for a prefix with optional fuzzy fallback.
+        
+        Details
+        -------
+        This method belongs to :class:`AutocompleteIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        prefix : str
+            Optional path/text prefix applied by the operation.
+        limit : int (default: ``10``)
+            Maximum number of results/messages/suggestions to return.
+        fuzzy_fallback : bool (default: ``True``)
+            Whether autocomplete may fall back to fuzzy matching when prefix matches are insufficient.
+        min_score : float (default: ``0.62``)
+            Minimum normalized/relevance score required for returned results.
+        
+        Returns
+        -------
+        ``List[AutocompleteEntry]`` result described by the method semantics.
+        """
         self._rebuild()
         key = _norm(prefix, self.case_sensitive)
         if not key:
@@ -626,13 +1464,39 @@ class AutocompleteIndex:
 
 
 class MultiPatternSearch:
-    """Aho-Corasick multi-pattern matcher.
-
-    Build cost is paid once. Searching is O(text length + number of matches),
-    making it suitable for keyword scanners, filters and many-pattern search.
+    """Aho-Corasick style multi-pattern matcher.
+    
+    Overview
+    --------
+    ``MultiPatternSearch`` provides one-pass discovery of many literal patterns in text.  It is part of YoungLion's public, dependency-free Python API and is designed to remain directly discoverable through ``help()``, IDLE and IDE hover/introspection tools.
+    
+    When to use it
+    --------------
+    Use for moderation keywords, signatures and dictionary matching.
+    
+    Inheritance
+    -----------
+    Base class(es): ``object``.
+    
+    Primary public operations
+    -------------------------
+    find, contains_any.
     """
 
     def __init__(self, patterns: Iterable[str], *, case_sensitive: bool = False):
+        """Initialize a new MultiPatternSearch instance using the supplied configuration and input data.
+        
+        Details
+        -------
+        This method belongs to :class:`MultiPatternSearch` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        patterns : Iterable[str]
+            Patterns indexed by MultiPatternSearch.
+        case_sensitive : bool (default: ``False``)
+            Whether string matching preserves case instead of using case-folded comparison.
+        """
         self.case_sensitive = bool(case_sensitive)
         self.patterns = tuple(str(pattern) for pattern in patterns)
         self._normalized = tuple(_norm(pattern, self.case_sensitive) for pattern in self.patterns)
@@ -674,6 +1538,21 @@ class MultiPatternSearch:
                 self._out[child].extend(self._out[self._fail[child]])
 
     def find(self, text: str) -> List[PatternMatch]:
+        """Return tree/search records that satisfy a predicate or query.
+        
+        Details
+        -------
+        This method belongs to :class:`MultiPatternSearch` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        text : str
+            Text/content input.
+        
+        Returns
+        -------
+        ``List[PatternMatch]`` result described by the method semantics.
+        """
         normalized = _norm(text, self.case_sensitive)
         state = 0
         matches: List[PatternMatch] = []
@@ -688,6 +1567,21 @@ class MultiPatternSearch:
         return matches
 
     def contains_any(self, text: str) -> bool:
+        """Return whether any configured pattern occurs in the supplied text.
+        
+        Details
+        -------
+        This method belongs to :class:`MultiPatternSearch` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        text : str
+            Text/content input.
+        
+        Returns
+        -------
+        ``bool`` result described by the method semantics.
+        """
         normalized = _norm(text, self.case_sensitive)
         state = 0
         for char in normalized:
@@ -700,25 +1594,104 @@ class MultiPatternSearch:
 
 
 class NumericSearch:
-    """Sorted numeric index for range/nearest queries in O(log n + k)."""
+    """Sorted numeric search index.
+    
+    Overview
+    --------
+    ``NumericSearch`` provides range lookup and nearest-neighbor queries over numeric values with payloads.  It is part of YoungLion's public, dependency-free Python API and is designed to remain directly discoverable through ``help()``, IDLE and IDE hover/introspection tools.
+    
+    When to use it
+    --------------
+    Use for prices, scores, measurements and other one-dimensional numeric fields.
+    
+    Inheritance
+    -----------
+    Base class(es): ``object``.
+    
+    Primary public operations
+    -------------------------
+    add, range, nearest.
+    """
 
     def __init__(self, values: Iterable[Tuple[float, Any]] = ()):
+        """Initialize a new NumericSearch instance using the supplied configuration and input data.
+        
+        Details
+        -------
+        This method belongs to :class:`NumericSearch` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        values : Iterable[Tuple[float, Any]] (default: ``()``)
+            Input iterable, mapping values or composite lookup values.
+        """
         items = sorted(((float(value), index, payload) for index, (value, payload) in enumerate(values)), key=lambda item: (item[0], item[1]))
         self._values: List[float] = [item[0] for item in items]
         self._payloads: List[Any] = [item[2] for item in items]
 
     def add(self, value: float, payload: Any = None) -> None:
+        """Add a value/record/operation to the current object according to its collection or numeric semantics.
+        
+        Details
+        -------
+        This method belongs to :class:`NumericSearch` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        value : float
+            Target, new or comparison value.
+        payload : Any (default: ``None``)
+            Application value associated with an indexed entry/document.
+        
+        Returns
+        -------
+        Return value documented by the owning API; mutating fluent methods may return ``self``.
+        """
         numeric = float(value)
         position = bisect.bisect_right(self._values, numeric)
         self._values.insert(position, numeric)
         self._payloads.insert(position, payload)
 
     def range(self, minimum: float, maximum: float) -> List[Tuple[float, Any]]:
+        """Return indexed entries inside numeric/string bounds according to inclusion flags.
+        
+        Details
+        -------
+        This method belongs to :class:`NumericSearch` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        minimum : float
+            Lower bound or minimum accepted value.
+        maximum : float
+            Upper bound or maximum accepted value.
+        
+        Returns
+        -------
+        ``List[Tuple[float, Any]]`` result described by the method semantics.
+        """
         lo = bisect.bisect_left(self._values, float(minimum))
         hi = bisect.bisect_right(self._values, float(maximum))
         return list(zip(self._values[lo:hi], self._payloads[lo:hi]))
 
     def nearest(self, value: float, k: int = 1) -> List[Tuple[float, Any]]:
+        """Return the k numerically nearest indexed entries to a target value.
+        
+        Details
+        -------
+        This method belongs to :class:`NumericSearch` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        value : float
+            Target, new or comparison value.
+        k : int (default: ``1``)
+            Value supplied for ``k`` according to the NumericSearch contract.
+        
+        Returns
+        -------
+        ``List[Tuple[float, Any]]`` result described by the method semantics.
+        """
         if k <= 0:
             return []
         target = float(value)
@@ -741,10 +1714,44 @@ class NumericSearch:
 
 
 class StructuredSearch:
-    """Search dictionaries/records with field weights and metadata filters."""
+    """Field-weighted record search.
+    
+    Overview
+    --------
+    ``StructuredSearch`` provides indexing mapping-like records with configurable field weights.  It is part of YoungLion's public, dependency-free Python API and is designed to remain directly discoverable through ``help()``, IDLE and IDE hover/introspection tools.
+    
+    When to use it
+    --------------
+    Use when free-text relevance must span several known structured fields.
+    
+    Inheritance
+    -----------
+    Base class(es): ``object``.
+    
+    Primary public operations
+    -------------------------
+    add, search.
+    """
 
     def __init__(self, records: Iterable[Mapping[str, Any]] = (), *, id_field: str = "id",
                  field_weights: Optional[Mapping[str, float]] = None, case_sensitive: bool = False):
+        """Initialize a new StructuredSearch instance using the supplied configuration and input data.
+        
+        Details
+        -------
+        This method belongs to :class:`StructuredSearch` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        records : Iterable[Mapping[str, Any]] (default: ``()``)
+            Input records for structured/DDM collection indexing.
+        id_field : str (default: ``'id'``)
+            Record field used to derive stable document identifiers.
+        field_weights : Optional[Mapping[str, float]] (default: ``None``)
+            Per-field search ranking weights.
+        case_sensitive : bool (default: ``False``)
+            Whether string matching preserves case instead of using case-folded comparison.
+        """
         self.id_field = id_field
         self.field_weights = dict(field_weights or {})
         self.index = SearchIndex(case_sensitive=case_sensitive)
@@ -752,6 +1759,21 @@ class StructuredSearch:
             self.add(record)
 
     def add(self, record: Mapping[str, Any]) -> SearchDocument:
+        """Add a value/record/operation to the current object according to its collection or numeric semantics.
+        
+        Details
+        -------
+        This method belongs to :class:`StructuredSearch` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        record : Mapping[str, Any]
+            Value supplied for ``record`` according to the StructuredSearch contract.
+        
+        Returns
+        -------
+        ``SearchDocument`` result described by the method semantics.
+        """
         data = dict(record)
         record_id = data.get(self.id_field, len(self.index) + 1)
         pieces: List[str] = []
@@ -763,14 +1785,67 @@ class StructuredSearch:
         return self.index.add(SearchDocument(record_id, " ".join(pieces), metadata={"record": data}, fields=data))
 
     def search(self, query: Union[str, SearchQuery], **kwargs: Any) -> List[SearchResult]:
+        """Search the current data/index using the query and options supported by this class.
+        
+        Details
+        -------
+        This method belongs to :class:`StructuredSearch` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        query : Union[str, SearchQuery]
+            Search text, structured query or SQL/XML expression according to the method.
+        **kwargs : Any
+            Keyword arguments forwarded to the target callable/helper.
+        
+        Returns
+        -------
+        ``List[SearchResult]`` result described by the method semantics.
+        """
         return self.index.search(query, **kwargs)
 
 
 class FileSearchEngine:
-    """Filename/path/content index with extension and size filters."""
+    """Filesystem search backend.
+    
+    Overview
+    --------
+    ``FileSearchEngine`` provides path/name metadata indexing with optional bounded file-content indexing.  It is part of YoungLion's public, dependency-free Python API and is designed to remain directly discoverable through ``help()``, IDLE and IDE hover/introspection tools.
+    
+    When to use it
+    --------------
+    Use for local application file search; call refresh after external filesystem changes.
+    
+    Inheritance
+    -----------
+    Base class(es): ``object``.
+    
+    Primary public operations
+    -------------------------
+    refresh, search_results, search.
+    """
 
     def __init__(self, root: Union[str, Path] = ".", *, content: bool = False, max_content_bytes: int = 2_000_000,
                  extensions: Optional[Iterable[str]] = None, case_sensitive: bool = False):
+        """Initialize a new FileSearchEngine instance using the supplied configuration and input data.
+        
+        Details
+        -------
+        This method belongs to :class:`FileSearchEngine` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        root : Union[str, Path] (default: ``'.'``)
+            Root directory for filesystem search.
+        content : bool (default: ``False``)
+            Text/bytes/content payload to write, search or convert.
+        max_content_bytes : int (default: ``2000000``)
+            Value supplied for ``max_content_bytes`` according to the FileSearchEngine contract.
+        extensions : Optional[Iterable[str]] (default: ``None``)
+            Allowed file extensions, typically including leading dots.
+        case_sensitive : bool (default: ``False``)
+            Whether string matching preserves case instead of using case-folded comparison.
+        """
         self.root = Path(root)
         self.content = bool(content)
         self.max_content_bytes = int(max_content_bytes)
@@ -782,6 +1857,16 @@ class FileSearchEngine:
         self.refresh()
 
     def refresh(self) -> "FileSearchEngine":
+        """Rebuild class-specific cached/indexed state from the current source.
+        
+        Details
+        -------
+        This method belongs to :class:`FileSearchEngine` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Returns
+        -------
+        ``'FileSearchEngine'`` result described by the method semantics.
+        """
         self.index.clear()
         if not self.root.exists():
             return self
@@ -810,6 +1895,29 @@ class FileSearchEngine:
 
     def search_results(self, query: Union[str, SearchQuery], *, extension: Optional[Union[str, Sequence[str]]] = None,
                        min_size: Optional[int] = None, max_size: Optional[int] = None, **kwargs: Any) -> List[SearchResult]:
+        """Return rich SearchResult-style objects rather than only application payloads/values.
+        
+        Details
+        -------
+        This method belongs to :class:`FileSearchEngine` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        query : Union[str, SearchQuery]
+            Search text, structured query or SQL/XML expression according to the method.
+        extension : Optional[Union[str, Sequence[str]]] (default: ``None``)
+            Value supplied for ``extension`` according to the FileSearchEngine contract.
+        min_size : Optional[int] (default: ``None``)
+            Optional minimum file/content size filter.
+        max_size : Optional[int] (default: ``None``)
+            Maximum number of cache entries retained.
+        **kwargs : Any
+            Keyword arguments forwarded to the target callable/helper.
+        
+        Returns
+        -------
+        ``List[SearchResult]`` result described by the method semantics.
+        """
         filters: Dict[str, Any] = dict(kwargs.pop("filters", {}) or {})
         if extension is not None:
             extensions = [extension] if isinstance(extension, str) else extension
@@ -827,15 +1935,74 @@ class FileSearchEngine:
         return self.index.search(query, filters=filters, **kwargs)
 
     def search(self, query: Union[str, SearchQuery], **kwargs: Any) -> List[str]:
+        """Search the current data/index using the query and options supported by this class.
+        
+        Details
+        -------
+        This method belongs to :class:`FileSearchEngine` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        query : Union[str, SearchQuery]
+            Search text, structured query or SQL/XML expression according to the method.
+        **kwargs : Any
+            Keyword arguments forwarded to the target callable/helper.
+        
+        Returns
+        -------
+        ``List[str]`` result described by the method semantics.
+        """
         return [result.document.metadata["path"] for result in self.search_results(query, **kwargs)]
 
 
 class GenerateTags:
-    """Bounded tag/phrase generator; avoids unbounded factorial explosions."""
+    """Legacy tag generator.
+    
+    Overview
+    --------
+    ``GenerateTags`` provides normalization, replacement, stop-word filtering and n-gram style tag generation.  It is part of YoungLion's public, dependency-free Python API and is designed to remain directly discoverable through ``help()``, IDLE and IDE hover/introspection tools.
+    
+    When to use it
+    --------------
+    Retained for compatibility; new full-text systems should prefer SearchIndex/ApplicationSearch.
+    
+    Inheritance
+    -----------
+    Base class(es): ``object``.
+    
+    Primary public operations
+    -------------------------
+    get_tags.
+    """
 
     def __init__(self, terms: Union[str, List[str]], lowercase: bool = True, clean_special_chars: bool = True,
                  min_words: int = 1, max_words: Optional[int] = None, replacements: Optional[dict] = None,
                  stop_words: Optional[List[str]] = None, max_tags: int = 10_000):
+        """Initialize a new GenerateTags instance using the supplied configuration and input data.
+        
+        Details
+        -------
+        This method belongs to :class:`GenerateTags` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        terms : Union[str, List[str]]
+            Search/index terms.
+        lowercase : bool (default: ``True``)
+            Value supplied for ``lowercase`` according to the GenerateTags contract.
+        clean_special_chars : bool (default: ``True``)
+            Value supplied for ``clean_special_chars`` according to the GenerateTags contract.
+        min_words : int (default: ``1``)
+            Minimum words per generated tag.
+        max_words : Optional[int] (default: ``None``)
+            Maximum words per generated tag.
+        replacements : Optional[dict] (default: ``None``)
+            Text replacement mapping used while generating tags.
+        stop_words : Optional[List[str]] (default: ``None``)
+            Words excluded from generated tags.
+        max_tags : int (default: ``10000``)
+            Maximum generated tags retained.
+        """
         self.terms = terms.split() if isinstance(terms, str) else list(terms) if isinstance(terms, list) else None
         if self.terms is None:
             raise ValueError("Terms must be either a string or a list of words.")
@@ -861,6 +2028,16 @@ class GenerateTags:
         return out
 
     def get_tags(self) -> List[str]:
+        """Return normalized/generated tags for the legacy compatibility object.
+        
+        Details
+        -------
+        This method belongs to :class:`GenerateTags` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Returns
+        -------
+        ``List[str]`` result described by the method semantics.
+        """
         tags: set[str] = set()
         variants = [[term, str(self.replacements[term])] if term in self.replacements else [term] for term in self.terms]
         for variant in itertools.product(*variants):
@@ -874,9 +2051,37 @@ class GenerateTags:
 
 
 class SearchData:
-    """Backward-compatible tag -> payload store backed by ``SearchIndex``."""
+    """Legacy tag-to-data adapter.
+    
+    Overview
+    --------
+    ``SearchData`` provides tag generation and retrieval over a collection of values.  It is part of YoungLion's public, dependency-free Python API and is designed to remain directly discoverable through ``help()``, IDLE and IDE hover/introspection tools.
+    
+    When to use it
+    --------------
+    Retained for compatibility.
+    
+    Inheritance
+    -----------
+    Base class(es): ``object``.
+    
+    Primary public operations
+    -------------------------
+    get_tags, get.
+    """
 
     def __init__(self, data: List[Dict[str, Any]]):
+        """Initialize a new SearchData instance using the supplied configuration and input data.
+        
+        Details
+        -------
+        This method belongs to :class:`SearchData` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        data : List[Dict[str, Any]]
+            Input mapping or record data used to initialize the object.
+        """
         self._structured_data: Dict[str, List[Any]] = {}
         self._index = SearchIndex()
         for entry in data:
@@ -889,9 +2094,34 @@ class SearchData:
             self._index.add(SearchDocument(len(self._index) + 1, " ".join(tags), metadata={"return": value}, tags=tuple(tags)))
 
     def get_tags(self) -> List[str]:
+        """Return normalized/generated tags for the legacy compatibility object.
+        
+        Details
+        -------
+        This method belongs to :class:`SearchData` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Returns
+        -------
+        ``List[str]`` result described by the method semantics.
+        """
         return list(self._structured_data)
 
     def get(self, tag: str) -> List[Any]:
+        """Return a value for a key, falling back to a default when the key is absent.
+        
+        Details
+        -------
+        This method belongs to :class:`SearchData` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        tag : str
+            Value supplied for ``tag`` according to the SearchData contract.
+        
+        Returns
+        -------
+        ``List[Any]`` result described by the method semantics.
+        """
         return list(self._structured_data.get(tag, ()))
 
     def __getitem__(self, tag: str) -> List[Any]:
@@ -905,13 +2135,58 @@ class SearchData:
 
 
 class Search:
-    """Historical Search API with the new ranked/fuzzy backend."""
+    """Legacy compatibility search facade.
+    
+    Overview
+    --------
+    ``Search`` provides simple query and ranked query methods over SearchData.  It is part of YoungLion's public, dependency-free Python API and is designed to remain directly discoverable through ``help()``, IDLE and IDE hover/introspection tools.
+    
+    When to use it
+    --------------
+    Use ApplicationSearch/SearchIndex for new systems.
+    
+    Inheritance
+    -----------
+    Base class(es): ``object``.
+    
+    Primary public operations
+    -------------------------
+    search, ranked.
+    """
 
     def __init__(self, sdata: SearchData, only_tag: bool = False):
+        """Initialize a new Search instance using the supplied configuration and input data.
+        
+        Details
+        -------
+        This method belongs to :class:`Search` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        sdata : SearchData
+            SearchData instance used by the compatibility Search facade.
+        only_tag : bool (default: ``False``)
+            Restrict compatibility search behavior to tags where supported.
+        """
         self.sdata = sdata
         self.only_tag = only_tag
 
     def search(self, query: str) -> List[Any]:
+        """Search the current data/index using the query and options supported by this class.
+        
+        Details
+        -------
+        This method belongs to :class:`Search` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        query : str
+            Search text, structured query or SQL/XML expression according to the method.
+        
+        Returns
+        -------
+        ``List[Any]`` result described by the method semantics.
+        """
         if self.only_tag:
             return self.sdata.get(query)
         results = self.sdata._index.search(query, algorithm=SearchAlgorithm.HYBRID, limit=5, min_score=0.18)
@@ -923,16 +2198,80 @@ class Search:
         return out
 
     def ranked(self, query: str, **kwargs: Any) -> List[SearchResult]:
+        """Run the legacy facade through the ranked search engine and return scored results.
+        
+        Details
+        -------
+        This method belongs to :class:`Search` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        query : str
+            Search text, structured query or SQL/XML expression according to the method.
+        **kwargs : Any
+            Keyword arguments forwarded to the target callable/helper.
+        
+        Returns
+        -------
+        ``List[SearchResult]`` result described by the method semantics.
+        """
         return self.sdata._index.search(query, **kwargs)
 
 
 class SearchFile(FileSearchEngine):
-    """Historical file-search name with the indexed backend."""
+    """Legacy filesystem search facade.
+    
+    Overview
+    --------
+    ``SearchFile`` provides simple name/content search rooted at a directory.  It is part of YoungLion's public, dependency-free Python API and is designed to remain directly discoverable through ``help()``, IDLE and IDE hover/introspection tools.
+    
+    When to use it
+    --------------
+    Use FileSearchEngine for richer result metadata and indexing.
+    
+    Inheritance
+    -----------
+    Base class(es): ``FileSearchEngine``.
+    
+    Primary public operations
+    -------------------------
+    search.
+    """
 
     def __init__(self, root: Union[str, Path] = "."):
+        """Initialize a new SearchFile instance using the supplied configuration and input data.
+        
+        Details
+        -------
+        This method belongs to :class:`SearchFile` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        root : Union[str, Path] (default: ``'.'``)
+            Root directory for filesystem search.
+        """
         super().__init__(root, content=False)
 
     def search(self, query: str, content: bool = False, case_sensitive: bool = False) -> List[str]:
+        """Search the current data/index using the query and options supported by this class.
+        
+        Details
+        -------
+        This method belongs to :class:`SearchFile` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        query : str
+            Search text, structured query or SQL/XML expression according to the method.
+        content : bool (default: ``False``)
+            Text/bytes/content payload to write, search or convert.
+        case_sensitive : bool (default: ``False``)
+            Whether string matching preserves case instead of using case-folded comparison.
+        
+        Returns
+        -------
+        ``List[str]`` result described by the method semantics.
+        """
         if content != self.content or case_sensitive != self.index.case_sensitive:
             self.content = content
             self.index.case_sensitive = case_sensitive
@@ -971,6 +2310,20 @@ __all__ = [
 
 @dataclass(slots=True)
 class DDMSearchHit:
+    """DDM text-search hit.
+    
+    Overview
+    --------
+    ``DDMSearchHit`` provides source key/object, path value and score metadata.  It is part of YoungLion's public, dependency-free Python API and is designed to remain directly discoverable through ``help()``, IDLE and IDE hover/introspection tools.
+    
+    When to use it
+    --------------
+    Returned when DDMSearchEngine.text is requested with hit metadata.
+    
+    Inheritance
+    -----------
+    Base class(es): ``object``.
+    """
     item: Any
     key: Any
     path: str
@@ -995,10 +2348,23 @@ def _index_key(value: Any) -> Any:
 
 
 class DDMPathIndex:
-    """Reusable index for one nested DDM path.
-
-    It combines a hash index for equality, sorted numeric/string arrays for
-    range/binary-search queries and a SearchIndex for ranked text/fuzzy search.
+    """Single dotted-path DDM index.
+    
+    Overview
+    --------
+    ``DDMPathIndex`` provides exact hash lookup, sorted ranges, prefix/contains and optional text index.  It is part of YoungLion's public, dependency-free Python API and is designed to remain directly discoverable through ``help()``, IDLE and IDE hover/introspection tools.
+    
+    When to use it
+    --------------
+    Built by DDMSearchEngine and reusable across many queries.
+    
+    Inheritance
+    -----------
+    Base class(es): ``object``.
+    
+    Primary public operations
+    -------------------------
+    exact, range, prefix, text, contains, stats.
     """
 
     __slots__ = (
@@ -1008,6 +2374,29 @@ class DDMPathIndex:
 
     def __init__(self, path: str, entries: Sequence[Tuple[Any, Any]], *, text: bool = True,
                  case_sensitive: bool = False, objects: Optional[Mapping[Any, Any]] = None):
+        """Initialize a new DDMPathIndex instance using the supplied configuration and input data.
+        
+        Details
+        -------
+        This method belongs to :class:`DDMPathIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        path : str
+            Filesystem path or dotted data path, according to the owning API.
+        entries : Sequence[Tuple[Any, Any]]
+            Initial autocomplete/index entries.
+        text : bool (default: ``True``)
+            Text/content input.
+        case_sensitive : bool (default: ``False``)
+            Whether string matching preserves case instead of using case-folded comparison.
+        objects : Optional[Mapping[Any, Any]] (default: ``None``)
+            Optional shared key-to-object mapping reused by DDM indexes.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         self.path = str(path)
         self.case_sensitive = bool(case_sensitive)
         self._entries = entries if isinstance(entries, list) else list(entries)
@@ -1045,10 +2434,54 @@ class DDMPathIndex:
         self._string_keys = [(row[0], row[1]) for row in self._strings]
 
     def exact(self, value: Any) -> List[DDMSearchHit]:
+        """Return records whose indexed dotted-path value exactly equals the target.
+        
+        Details
+        -------
+        This method belongs to :class:`DDMPathIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        value : Any
+            Target, new or comparison value.
+        
+        Returns
+        -------
+        ``List[DDMSearchHit]`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         return [DDMSearchHit(self._objects[key], key, self.path, self._values[key]) for key in self._exact.get(_index_key(value), ())]
 
     def range(self, minimum: Any = None, maximum: Any = None, *, include_min: bool = True,
               include_max: bool = True) -> List[DDMSearchHit]:
+        """Return indexed entries inside numeric/string bounds according to inclusion flags.
+        
+        Details
+        -------
+        This method belongs to :class:`DDMPathIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        minimum : Any (default: ``None``)
+            Lower bound or minimum accepted value.
+        maximum : Any (default: ``None``)
+            Upper bound or maximum accepted value.
+        include_min : bool (default: ``True``)
+            Whether a lower range bound is inclusive.
+        include_max : bool (default: ``True``)
+            Whether an upper range bound is inclusive.
+        
+        Returns
+        -------
+        ``List[DDMSearchHit]`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         if isinstance(minimum, str) or isinstance(maximum, str):
             rows = self._strings
             lo_value = "" if minimum is None else _norm(minimum, self.case_sensitive)
@@ -1069,6 +2502,27 @@ class DDMPathIndex:
         return [DDMSearchHit(self._objects[key], key, self.path, self._values[key], 1.0, "range") for _, _, key in rows[lo:hi]]
 
     def prefix(self, prefix: str, *, limit: Optional[int] = None) -> List[DDMSearchHit]:
+        """Return records whose indexed string value begins with the supplied prefix.
+        
+        Details
+        -------
+        This method belongs to :class:`DDMPathIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        prefix : str
+            Optional path/text prefix applied by the operation.
+        limit : Optional[int] (default: ``None``)
+            Maximum number of results/messages/suggestions to return.
+        
+        Returns
+        -------
+        ``List[DDMSearchHit]`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         q = _norm(prefix, self.case_sensitive)
         lo = bisect.bisect_left(self._string_keys, (q, -1))
         out: List[DDMSearchHit] = []
@@ -1082,6 +2536,31 @@ class DDMPathIndex:
 
     def text(self, query: str, *, algorithm: Union[SearchAlgorithm, str] = SearchAlgorithm.HYBRID,
              limit: Optional[int] = 10, min_score: float = 0.0) -> List[DDMSearchHit]:
+        """Perform the ``text`` operation for DDMPathIndex.
+        
+        Details
+        -------
+        This method belongs to :class:`DDMPathIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        query : str
+            Search text, structured query or SQL/XML expression according to the method.
+        algorithm : Union[SearchAlgorithm, str] (default: ``SearchAlgorithm.HYBRID``)
+            Algorithm name used for hashing, fuzzy matching or search ranking.
+        limit : Optional[int] (default: ``10``)
+            Maximum number of results/messages/suggestions to return.
+        min_score : float (default: ``0.0``)
+            Minimum normalized/relevance score required for returned results.
+        
+        Returns
+        -------
+        ``List[DDMSearchHit]`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         if self._text is None:
             return []
         return [
@@ -1091,6 +2570,27 @@ class DDMPathIndex:
         ]
 
     def contains(self, needle: Any, *, case_sensitive: Optional[bool] = None) -> List[DDMSearchHit]:
+        """Return whether a value/substring lies within the represented range or indexed path data.
+        
+        Details
+        -------
+        This method belongs to :class:`DDMPathIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        needle : Any
+            Value supplied for ``needle`` according to the DDMPathIndex contract.
+        case_sensitive : Optional[bool] (default: ``None``)
+            Whether string matching preserves case instead of using case-folded comparison.
+        
+        Returns
+        -------
+        ``List[DDMSearchHit]`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         cs = self.case_sensitive if case_sensitive is None else case_sensitive
         q = _norm(needle, cs)
         out = []
@@ -1100,6 +2600,20 @@ class DDMPathIndex:
         return out
 
     def stats(self) -> Dict[str, int]:
+        """Return diagnostic counts describing the current cache/index/processor state.
+        
+        Details
+        -------
+        This method belongs to :class:`DDMPathIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Returns
+        -------
+        Dictionary/dataclass containing diagnostic statistics for the current object.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         return {
             "values": len(self._values),
             "exact_keys": len(self._exact),
@@ -1109,12 +2623,48 @@ class DDMPathIndex:
 
 
 class DDMCompositeIndex:
-    """Hash index over multiple DDM paths for multi-column exact lookups."""
+    """Composite exact DDM index.
+    
+    Overview
+    --------
+    ``DDMCompositeIndex`` provides hash lookup over a tuple of multiple dotted-path values.  It is part of YoungLion's public, dependency-free Python API and is designed to remain directly discoverable through ``help()``, IDLE and IDE hover/introspection tools.
+    
+    When to use it
+    --------------
+    Use for repeated equality queries that constrain the same field combination.
+    
+    Inheritance
+    -----------
+    Base class(es): ``object``.
+    
+    Primary public operations
+    -------------------------
+    find.
+    """
 
     __slots__ = ("paths", "_objects", "_index")
 
     def __init__(self, paths: Sequence[str], entries: Sequence[Tuple[Any, Any]],
                  *, objects: Optional[Mapping[Any, Any]] = None):
+        """Initialize a new DDMCompositeIndex instance using the supplied configuration and input data.
+        
+        Details
+        -------
+        This method belongs to :class:`DDMCompositeIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        paths : Sequence[str]
+            Dotted paths participating in an index/composite operation.
+        entries : Sequence[Tuple[Any, Any]]
+            Initial autocomplete/index entries.
+        objects : Optional[Mapping[Any, Any]] (default: ``None``)
+            Optional shared key-to-object mapping reused by DDM indexes.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         if not paths:
             raise ValueError("paths cannot be empty")
         self.paths = tuple(paths)
@@ -1128,20 +2678,60 @@ class DDMCompositeIndex:
             self._index.setdefault(tuple(_index_key(v) for v in values), []).append(key)
 
     def find(self, *values: Any) -> List[Any]:
+        """Return tree/search records that satisfy a predicate or query.
+        
+        Details
+        -------
+        This method belongs to :class:`DDMCompositeIndex` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        *values : Any
+            Input iterable, mapping values or composite lookup values.
+        
+        Returns
+        -------
+        ``List[Any]`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         if len(values) != len(self.paths):
             raise ValueError(f"expected {len(self.paths)} values")
         return [self._objects[key] for key in self._index.get(tuple(_index_key(v) for v in values), ())]
 
 
 class DDMSearchEngine:
-    """Optimized search/query engine for large DDM collections.
-
-    The source may be ``List[DDM]``, ``Dict[key, DDM]``, ``ListDDM``, ``SetDDM``,
-    ``DictDDM`` or any iterable of DDM-compatible records. Create reusable path
-    indexes for hot query fields, for example ``profile.name`` or ``profile.age``.
-
-    Collection-owned batch mutations automatically invalidate affected indexes.
-    When records are mutated directly outside the collection, call ``refresh()``.
+    """Nested structured-data search engine.
+    
+    Overview
+    --------
+    ``DDMSearchEngine`` provides shared record snapshot plus reusable exact/range/text/composite dotted-path indexes and scan fallback.  It is part of YoungLion's public, dependency-free Python API and is designed to remain directly discoverable through ``help()``, IDLE and IDE hover/introspection tools.
+    
+    When to use it
+    --------------
+    Use for large DDM-compatible datasets and queries such as profile.name or economy.balance.
+    
+    Inheritance
+    -----------
+    Base class(es): ``object``.
+    
+    Primary public operations
+    -------------------------
+    refresh, invalidate, create_index, create_indexes, create_composite_index, find, find_one, exists, count, between, text, composite, where, order_by, values, stats.
+    
+    Index strategy
+    --------------
+    The engine shares one source/object snapshot across path/composite indexes to avoid repeating the same object map for every indexed field. Exact indexes use hash maps, range-friendly values use sorted data, and optional text indexes use YoungLion SearchIndex.
+    
+    Example::
+    
+        engine = DDMSearchEngine(users).create_indexes(
+            "id", "profile.name", "profile.age"
+        )
+        alice = engine.find_one("profile.name", "Alice")
+        adults = engine.between("profile.age", 18, 65)
     """
 
     OPS = {"eq", "ne", "lt", "le", "lte", "gt", "ge", "gte", "contains", "prefix", "startswith", "endswith", "in", "is_none", "not_none"}
@@ -1152,6 +2742,23 @@ class DDMSearchEngine:
     )
 
     def __init__(self, source: Any, *, case_sensitive: bool = False):
+        """Initialize a new DDMSearchEngine instance using the supplied configuration and input data.
+        
+        Details
+        -------
+        This method belongs to :class:`DDMSearchEngine` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        source : Any
+            Source path, collection or transfer identifier.
+        case_sensitive : bool (default: ``False``)
+            Whether string matching preserves case instead of using case-folded comparison.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         self.source = source
         self.case_sensitive = bool(case_sensitive)
         self._indexes: Dict[str, DDMPathIndex] = {}
@@ -1196,6 +2803,21 @@ class DDMSearchEngine:
         self._object_cache = None
 
     def refresh(self) -> "DDMSearchEngine":
+        """Rebuild class-specific cached/indexed state from the current source.
+        
+        Details
+        -------
+        This method belongs to :class:`DDMSearchEngine` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Returns
+        -------
+        ``'DDMSearchEngine'`` result described by the method semantics.
+        
+        Notes
+        -----
+        Refresh rebuilds the source snapshot and cached indexes. Use it after structural/external source mutations that the engine could not observe automatically.
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         paths = list(self._indexes)
         composites = list(self._composite)
         self._indexes.clear(); self._composite.clear(); self._dirty.clear(); self._all_dirty = False
@@ -1205,6 +2827,26 @@ class DDMSearchEngine:
         return self
 
     def invalidate(self, paths: Optional[Iterable[str]] = None) -> None:
+        """Invalidate cached lazy fields so they will be recomputed on next access.
+        
+        Details
+        -------
+        This method belongs to :class:`DDMSearchEngine` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        paths : Optional[Iterable[str]] (default: ``None``)
+            Dotted paths participating in an index/composite operation.
+        
+        Returns
+        -------
+        Return value documented by the owning API; mutating fluent methods may return ``self``.
+        
+        Notes
+        -----
+        Path-only invalidation allows targeted indexes to be rebuilt while retaining the shared record snapshot when source structure itself has not changed.
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         if paths is None:
             self._all_dirty = True
             self._clear_record_store()
@@ -1218,6 +2860,28 @@ class DDMSearchEngine:
                 self._all_dirty = True
 
     def create_index(self, path: str, *, text: bool = True) -> DDMPathIndex:
+        """Create and cache an index for one dotted path.
+        
+        Details
+        -------
+        This method belongs to :class:`DDMSearchEngine` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        path : str
+            Filesystem path or dotted data path, according to the owning API.
+        text : bool (default: ``True``)
+            Text/content input.
+        
+        Returns
+        -------
+        ``DDMPathIndex`` result described by the method semantics.
+        
+        Notes
+        -----
+        Index construction has an upfront time/memory cost but can turn repeated exact queries into hash lookups and repeated ranges into sorted-index operations.
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         index = DDMPathIndex(path, self._entries(), text=text, case_sensitive=self.case_sensitive, objects=self._objects())
         self._indexes[path] = index; self._dirty.discard(path)
         return index
@@ -1225,10 +2889,50 @@ class DDMSearchEngine:
     index = create_index
 
     def create_indexes(self, *paths: str, text: bool = True) -> "DDMSearchEngine":
+        """Create indexes for several dotted paths and return the engine for fluent setup.
+        
+        Details
+        -------
+        This method belongs to :class:`DDMSearchEngine` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        *paths : str
+            Dotted paths participating in an index/composite operation.
+        text : bool (default: ``True``)
+            Text/content input.
+        
+        Returns
+        -------
+        ``'DDMSearchEngine'`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         for path in paths: self.create_index(path, text=text)
         return self
 
     def create_composite_index(self, *paths: str) -> DDMCompositeIndex:
+        """Create a reusable exact index over a tuple of dotted paths.
+        
+        Details
+        -------
+        This method belongs to :class:`DDMSearchEngine` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        *paths : str
+            Dotted paths participating in an index/composite operation.
+        
+        Returns
+        -------
+        ``DDMCompositeIndex`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         key = tuple(paths)
         index = DDMCompositeIndex(key, self._entries(), objects=self._objects())
         self._composite[key] = index
@@ -1243,6 +2947,33 @@ class DDMSearchEngine:
 
     def find(self, path: str, value: Any = None, *, op: str = "eq", limit: Optional[int] = None,
              use_index: bool = True) -> List[Any]:
+        """Return tree/search records that satisfy a predicate or query.
+        
+        Details
+        -------
+        This method belongs to :class:`DDMSearchEngine` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        path : str
+            Filesystem path or dotted data path, according to the owning API.
+        value : Any (default: ``None``)
+            Target, new or comparison value.
+        op : str (default: ``'eq'``)
+            Comparison operator name such as eq/ne/lt/lte/gt/gte/prefix/contains where supported.
+        limit : Optional[int] (default: ``None``)
+            Maximum number of results/messages/suggestions to return.
+        use_index : bool (default: ``True``)
+            Value supplied for ``use_index`` according to the DDMSearchEngine contract.
+        
+        Returns
+        -------
+        ``List[Any]`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         op = op.lower()
         op = {"gte": "ge", "lte": "le"}.get(op, op)
         if use_index and op in {"eq", "prefix", "startswith", "contains"}:
@@ -1265,25 +2996,175 @@ class DDMSearchEngine:
 
     def find_one(self, path: str, value: Any = None, *, op: str = "eq", default: Any = None,
                  use_index: bool = True) -> Any:
+        """Return the first matching record for a dotted-path comparison or a default.
+        
+        Details
+        -------
+        This method belongs to :class:`DDMSearchEngine` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        path : str
+            Filesystem path or dotted data path, according to the owning API.
+        value : Any (default: ``None``)
+            Target, new or comparison value.
+        op : str (default: ``'eq'``)
+            Comparison operator name such as eq/ne/lt/lte/gt/gte/prefix/contains where supported.
+        default : Any (default: ``None``)
+            Fallback returned/used when the requested value or path is absent.
+        use_index : bool (default: ``True``)
+            Value supplied for ``use_index`` according to the DDMSearchEngine contract.
+        
+        Returns
+        -------
+        First matching source record, or the caller-provided default.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         rows = self.find(path, value, op=op, limit=1, use_index=use_index)
         return rows[0] if rows else default
 
     def exists(self, path: str, value: Any = None, *, op: str = "eq") -> bool:
+        """Return whether any record satisfies the dotted-path comparison.
+        
+        Details
+        -------
+        This method belongs to :class:`DDMSearchEngine` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        path : str
+            Filesystem path or dotted data path, according to the owning API.
+        value : Any (default: ``None``)
+            Target, new or comparison value.
+        op : str (default: ``'eq'``)
+            Comparison operator name such as eq/ne/lt/lte/gt/gte/prefix/contains where supported.
+        
+        Returns
+        -------
+        ``True`` if at least one matching record exists.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         return self.find_one(path, value, op=op, default=None) is not None
 
     def count(self, path: str, value: Any = None, *, op: str = "eq") -> int:
+        """Return the number of stored values or matching records, depending on the class.
+        
+        Details
+        -------
+        This method belongs to :class:`DDMSearchEngine` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        path : str
+            Filesystem path or dotted data path, according to the owning API.
+        value : Any (default: ``None``)
+            Target, new or comparison value.
+        op : str (default: ``'eq'``)
+            Comparison operator name such as eq/ne/lt/lte/gt/gte/prefix/contains where supported.
+        
+        Returns
+        -------
+        Number of records/fields matching the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         return len(self.find(path, value, op=op))
 
     def between(self, path: str, minimum: Any, maximum: Any, *, include_min: bool = True,
                 include_max: bool = True) -> List[Any]:
+        """Return records whose dotted-path value falls within the requested bounds.
+        
+        Details
+        -------
+        This method belongs to :class:`DDMSearchEngine` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        path : str
+            Filesystem path or dotted data path, according to the owning API.
+        minimum : Any
+            Lower bound or minimum accepted value.
+        maximum : Any
+            Upper bound or maximum accepted value.
+        include_min : bool (default: ``True``)
+            Whether a lower range bound is inclusive.
+        include_max : bool (default: ``True``)
+            Whether an upper range bound is inclusive.
+        
+        Returns
+        -------
+        ``List[Any]`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         return [hit.item for hit in self._ensure(path).range(minimum, maximum, include_min=include_min, include_max=include_max)]
 
     def text(self, path: str, query: str, *, algorithm: Union[SearchAlgorithm, str] = SearchAlgorithm.HYBRID,
              limit: Optional[int] = 10, min_score: float = 0.0, hits: bool = False):
+        """Perform the ``text`` operation for DDMSearchEngine.
+        
+        Details
+        -------
+        This method belongs to :class:`DDMSearchEngine` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        path : str
+            Filesystem path or dotted data path, according to the owning API.
+        query : str
+            Search text, structured query or SQL/XML expression according to the method.
+        algorithm : Union[SearchAlgorithm, str] (default: ``SearchAlgorithm.HYBRID``)
+            Algorithm name used for hashing, fuzzy matching or search ranking.
+        limit : Optional[int] (default: ``10``)
+            Maximum number of results/messages/suggestions to return.
+        min_score : float (default: ``0.0``)
+            Minimum normalized/relevance score required for returned results.
+        hits : bool (default: ``False``)
+            Whether DDM text search returns DDMSearchHit metadata instead of only source objects.
+        
+        Returns
+        -------
+        Return value documented by the owning API; mutating fluent methods may return ``self``.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         results = self._ensure(path).text(query, algorithm=algorithm, limit=limit, min_score=min_score)
         return results if hits else [result.item for result in results]
 
     def composite(self, paths: Sequence[str], values: Sequence[Any]) -> List[Any]:
+        """Query a previously built composite dotted-path index.
+        
+        Details
+        -------
+        This method belongs to :class:`DDMSearchEngine` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        paths : Sequence[str]
+            Dotted paths participating in an index/composite operation.
+        values : Sequence[Any]
+            Input iterable, mapping values or composite lookup values.
+        
+        Returns
+        -------
+        ``List[Any]`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         key = tuple(paths)
         if self._all_dirty:
             self.refresh()
@@ -1300,6 +3181,32 @@ class DDMSearchEngine:
         return ".".join(parts), op
 
     def where(self, **lookups: Any) -> List[Any]:
+        """Apply one or more structured lookup expressions and return matching records.
+        
+        Details
+        -------
+        This method belongs to :class:`DDMSearchEngine` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        **lookups : Any
+            Structured lookup expressions supplied as keyword arguments.
+        
+        Returns
+        -------
+        ``List[Any]`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        
+        Example::
+        
+            active_adults = engine.where(
+                active__eq=True,
+                profile__age__gte=18,
+            )
+        """
         if not lookups:
             return list(self._items())
         result: Optional[List[Any]] = None
@@ -1317,12 +3224,70 @@ class DDMSearchEngine:
     query = where
 
     def order_by(self, path: str, *, reverse: bool = False, missing_last: bool = True) -> List[Any]:
+        """Return source records ordered by a dotted-path value.
+        
+        Details
+        -------
+        This method belongs to :class:`DDMSearchEngine` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        path : str
+            Filesystem path or dotted data path, according to the owning API.
+        reverse : bool (default: ``False``)
+            When True, reverse the natural ordering.
+        missing_last : bool (default: ``True``)
+            Whether records lacking the sort path should be placed after records with values.
+        
+        Returns
+        -------
+        ``List[Any]`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         return _native.batch_sort_path(self._items(), path, reverse=reverse, missing_last=missing_last)
 
     def values(self, path: str, default: Any = None) -> List[Any]:
+        """Return a dynamic view or collection of stored values.
+        
+        Details
+        -------
+        This method belongs to :class:`DDMSearchEngine` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        path : str
+            Filesystem path or dotted data path, according to the owning API.
+        default : Any (default: ``None``)
+            Fallback returned/used when the requested value or path is absent.
+        
+        Returns
+        -------
+        ``List[Any]`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         return _native.batch_get_path(self._items(), path, default)
 
     def stats(self) -> Dict[str, Any]:
+        """Return diagnostic counts describing the current cache/index/processor state.
+        
+        Details
+        -------
+        This method belongs to :class:`DDMSearchEngine` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Returns
+        -------
+        Dictionary/dataclass containing diagnostic statistics for the current object.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         return {
             "records": len(self._items()),
             "indexes": {path: index.stats() for path, index in self._indexes.items()},
@@ -1335,13 +3300,49 @@ _SEARCH_MISSING = object()
 
 
 class ApplicationSearch:
-    """Batteries-included in-process search backend for application result pages.
-
-    It combines ranked text retrieval, structured fields, filters, autocomplete,
-    facets and arbitrary payloads. Mutations keep the autocomplete view coherent.
+    """Application-facing search backend.
+    
+    Overview
+    --------
+    ``ApplicationSearch`` provides document CRUD, ranked results, payload retrieval, autocomplete, facets and statistics.  It is part of YoungLion's public, dependency-free Python API and is designed to remain directly discoverable through ``help()``, IDLE and IDE hover/introspection tools.
+    
+    When to use it
+    --------------
+    Use for command palettes, help centers, settings, product/catalog and local app search.
+    
+    Inheritance
+    -----------
+    Base class(es): ``object``.
+    
+    Primary public operations
+    -------------------------
+    add, update, remove, search_results, search, suggest, facet, stats.
+    
+    Example::
+    
+        search = ApplicationSearch()
+        search.add("settings.theme", "Theme", "Change application appearance",
+                   tags=["settings", "appearance"], payload={"route": "/theme"})
+        routes = search.search("appearance")
+        suggestions = search.suggest("the")
     """
 
     def __init__(self, *, case_sensitive: bool = False):
+        """Initialize a new ApplicationSearch instance using the supplied configuration and input data.
+        
+        Details
+        -------
+        This method belongs to :class:`ApplicationSearch` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        case_sensitive : bool (default: ``False``)
+            Whether string matching preserves case instead of using case-folded comparison.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         self._case_sensitive = bool(case_sensitive)
         self.index = SearchIndex(case_sensitive=case_sensitive)
         self.autocomplete = AutocompleteIndex(case_sensitive=case_sensitive)
@@ -1355,6 +3356,45 @@ class ApplicationSearch:
 
     def add(self, doc_id: Hashable, title: str, body: str = "", *, tags: Iterable[str] = (),
             fields: Optional[Mapping[str, Any]] = None, payload: Any = None, autocomplete_weight: float = 1.0) -> SearchDocument:
+        """Add a value/record/operation to the current object according to its collection or numeric semantics.
+        
+        Details
+        -------
+        This method belongs to :class:`ApplicationSearch` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        doc_id : Hashable
+            Stable document identifier.
+        title : str
+            Value supplied for ``title`` according to the ApplicationSearch contract.
+        body : str (default: ``''``)
+            Plain-text message body.
+        tags : Iterable[str] (default: ``()``)
+            Value supplied for ``tags`` according to the ApplicationSearch contract.
+        fields : Optional[Mapping[str, Any]] (default: ``None``)
+            Field names or field mapping used for structured document data.
+        payload : Any (default: ``None``)
+            Application value associated with an indexed entry/document.
+        autocomplete_weight : float (default: ``1.0``)
+            Weight assigned to the document title in autocomplete ranking.
+        
+        Returns
+        -------
+        ``SearchDocument`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        
+        Example::
+        
+            search.add(
+                "cmd.settings", "Settings", "Open application settings",
+                tags=["config"], fields={"category": "system"},
+                payload={"route": "/settings"},
+            )
+        """
         title = str(title)
         body = str(body)
         fields_dict = dict(fields or {})
@@ -1378,6 +3418,38 @@ class ApplicationSearch:
     def update(self, doc_id: Hashable, *, title: Optional[str] = None, body: Optional[str] = None,
                tags: Optional[Iterable[str]] = None, fields: Optional[Mapping[str, Any]] = None, payload: Any = _SEARCH_MISSING,
                autocomplete_weight: Optional[float] = None) -> SearchDocument:
+        """Update top-level fields from mapping arguments and keyword values.
+        
+        Details
+        -------
+        This method belongs to :class:`ApplicationSearch` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        doc_id : Hashable
+            Stable document identifier.
+        title : Optional[str] (default: ``None``)
+            Value supplied for ``title`` according to the ApplicationSearch contract.
+        body : Optional[str] (default: ``None``)
+            Plain-text message body.
+        tags : Optional[Iterable[str]] (default: ``None``)
+            Value supplied for ``tags`` according to the ApplicationSearch contract.
+        fields : Optional[Mapping[str, Any]] (default: ``None``)
+            Field names or field mapping used for structured document data.
+        payload : Any (default: ``_SEARCH_MISSING``)
+            Application value associated with an indexed entry/document.
+        autocomplete_weight : Optional[float] (default: ``None``)
+            Weight assigned to the document title in autocomplete ranking.
+        
+        Returns
+        -------
+        ``SearchDocument`` result described by the method semantics.
+        
+        Notes
+        -----
+        Updates rebuild the affected indexed/autocomplete state so stale title/body suggestions are not retained.
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         old = self.index._docs[doc_id]
         old_title = str(old.metadata.get("title", ""))
         old_body = str(old.metadata.get("body", ""))
@@ -1399,6 +3471,25 @@ class ApplicationSearch:
         return document
 
     def remove(self, doc_id: Hashable) -> bool:
+        """Remove an existing record/document/event and raise or report according to the class contract when absent.
+        
+        Details
+        -------
+        This method belongs to :class:`ApplicationSearch` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        doc_id : Hashable
+            Stable document identifier.
+        
+        Returns
+        -------
+        ``bool`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         removed = self.index.remove(doc_id)
         if removed:
             self._payloads.pop(doc_id, None)
@@ -1407,22 +3498,124 @@ class ApplicationSearch:
         return removed
 
     def search_results(self, query: Union[str, SearchQuery], **kwargs: Any) -> List[SearchResult]:
+        """Return rich SearchResult-style objects rather than only application payloads/values.
+        
+        Details
+        -------
+        This method belongs to :class:`ApplicationSearch` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        query : Union[str, SearchQuery]
+            Search text, structured query or SQL/XML expression according to the method.
+        **kwargs : Any
+            Keyword arguments forwarded to the target callable/helper.
+        
+        Returns
+        -------
+        ``List[SearchResult]`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         return self.index.search(query, **kwargs)
 
     def search(self, query: Union[str, SearchQuery], **kwargs: Any) -> List[Any]:
+        """Search the current data/index using the query and options supported by this class.
+        
+        Details
+        -------
+        This method belongs to :class:`ApplicationSearch` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        query : Union[str, SearchQuery]
+            Search text, structured query or SQL/XML expression according to the method.
+        **kwargs : Any
+            Keyword arguments forwarded to the target callable/helper.
+        
+        Returns
+        -------
+        ``List[Any]`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         results = self.search_results(query, **kwargs)
         return [self._payloads.get(result.document.id, result.document) for result in results]
 
     def suggest(self, prefix: str, *, limit: int = 10, fuzzy: bool = True) -> List[AutocompleteEntry]:
+        """Return ranked autocomplete candidates for a prefix with optional fuzzy fallback.
+        
+        Details
+        -------
+        This method belongs to :class:`ApplicationSearch` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        prefix : str
+            Optional path/text prefix applied by the operation.
+        limit : int (default: ``10``)
+            Maximum number of results/messages/suggestions to return.
+        fuzzy : bool (default: ``True``)
+            Whether suggestions may use fuzzy fallback.
+        
+        Returns
+        -------
+        ``List[AutocompleteEntry]`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         return self.autocomplete.suggest(prefix, limit=limit, fuzzy_fallback=fuzzy)
 
     def facet(self, field: str, *, query: Optional[str] = None, limit: Optional[int] = None) -> List[Tuple[Any, int]]:
+        """Count values for one field, optionally restricted to documents matching a query.
+        
+        Details
+        -------
+        This method belongs to :class:`ApplicationSearch` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Parameters
+        ----------
+        field : str
+            Field name used for a facet or structured operation.
+        query : Optional[str] (default: ``None``)
+            Search text, structured query or SQL/XML expression according to the method.
+        limit : Optional[int] (default: ``None``)
+            Maximum number of results/messages/suggestions to return.
+        
+        Returns
+        -------
+        ``List[Tuple[Any, int]]`` result described by the method semantics.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         docs = self.index._docs.values() if query is None else (result.document for result in self.index.search(query, limit=None))
         counts = Counter(doc.fields.get(field) for doc in docs if field in doc.fields)
         rows = counts.most_common()
         return rows if limit is None else rows[:max(0, int(limit))]
 
     def stats(self) -> SearchStats:
+        """Return diagnostic counts describing the current cache/index/processor state.
+        
+        Details
+        -------
+        This method belongs to :class:`ApplicationSearch` and follows that class's storage, mutation, error and thread-safety semantics. It is documented at runtime so interactive users can understand the operation without consulting the external documentation site.
+        
+        Returns
+        -------
+        Dictionary/dataclass containing diagnostic statistics for the current object.
+        
+        Notes
+        -----
+        Indexes are in-memory and process-local. Reuse the same index/engine for repeated queries to amortize index construction cost.
+        """
         return self.index.stats()
 
 

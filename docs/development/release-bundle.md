@@ -8,7 +8,7 @@ After preflight, individual matrix jobs upload component artifacts. The final
 assembly produces one artifact with this layout:
 
 ```text
-YoungLion-0.1.0-release-bundle/
+YoungLion-0.1.1-release-bundle/
 ├── pypi/                 # stable wheels + exactly one sdist
 ├── experimental/         # preview targets; do not upload by default
 ├── checksums/

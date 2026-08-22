@@ -1,6 +1,6 @@
 # YoungLion documentation
 
-This directory is the complete documentation hub for YoungLion 0.1.0.
+This directory is the complete documentation hub for YoungLion 0.1.1.
 
 ## Getting started
 - [Installation](installation.md)

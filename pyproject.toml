@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "YoungLion"
-version = "0.1.0"
+version = "0.1.1"
 authors = [{ name = "Cavanşir Qurbanzadə", email = "cavanshirpro@gmail.com" }]
 maintainers = [{ name = "Cavanşir Qurbanzadə", email = "cavanshirpro@gmail.com" }]
 description = "Dependency-free native C++ accelerated Python toolkit for dynamic data models, fast file operations, ranked/fuzzy search and developer utilities."
